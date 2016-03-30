@@ -176,11 +176,25 @@ def generate_plate(font_height, char_ims):
     return plate, rounded_rect(out_shape, radius), code.replace(" ", "")
 
 
+def generate_bg():
+    found = False
+    while not found:
+        bg = cv2.imread("/media/vbox_e_drive/bgs/{:08d}.jpg".format(
+                                                   random.randint(0, 108600)),
+                        cv2.CV_LOAD_IMAGE_GRAYSCALE) / 255.
+        if (bg.shape[1] >= OUTPUT_SHAPE[1] and
+            bg.shape[0] >= OUTPUT_SHAPE[0]):
+            found = True
+
+    x = random.randint(0, bg.shape[1] - OUTPUT_SHAPE[1])
+    y = random.randint(0, bg.shape[0] - OUTPUT_SHAPE[0])
+    bg = bg[y:y + OUTPUT_SHAPE[0], x:x + OUTPUT_SHAPE[1]]
+
+    return bg
+
+
 def generate_im(char_ims, variation=1.0):
-    #bg = cv2.imread("bgs/{:08d}.jpg".format(random.randint(0, 108600)),
-    #               cv2.CV_LOAD_IMAGE_GRAYSCALE) / 255.
-    #bg = bg[bg.shape[0] // 4:3 * (bg.shape[0] // 4), :]
-    bg = numpy.random.random(OUTPUT_SHAPE)
+    bg = generate_bg()
 
     plate, plate_mask, code = generate_plate(FONT_HEIGHT, char_ims)
     
