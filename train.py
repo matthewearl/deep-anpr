@@ -1,6 +1,7 @@
 import glob
 import itertools
 import random
+import sys
 
 import cv2
 import numpy
@@ -26,6 +27,11 @@ def conv2d(x, W, stride=(1, 1)):
 
 def max_pool(x, ksize=(2, 2), stride=(2, 2)):
   return tf.nn.max_pool(x, ksize=[1, ksize[0], ksize[1], 1],
+                        strides=[1, stride[0], stride[1], 1], padding='SAME')
+
+
+def avg_pool(x, ksize=(2, 2), stride=(2, 2)):
+  return tf.nn.avg_pool(x, ksize=[1, ksize[0], ksize[1], 1],
                         strides=[1, stride[0], stride[1], 1], padding='SAME')
 
 
@@ -58,18 +64,18 @@ def deep_model1():
     W_conv1 = weight_variable([5, 5, 1, 24])
     b_conv1 = bias_variable([24])
     x_image = tf.reshape(x, [-1,64,128,1])
-    h_conv1 = tf.nn.sigmoid(conv2d(x_image, W_conv1) + b_conv1)
+    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
     h_pool1 = max_pool(h_conv1, ksize=(8, 8), stride=(8, 8))
 
     # Densely connected layer
-    W_fc1 = weight_variable([16 * 8 * 24, 1024])
-    b_fc1 = bias_variable([1024])
+    W_fc1 = weight_variable([16 * 8 * 24, 256])
+    b_fc1 = bias_variable([256])
 
     h_pool1_flat = tf.reshape(h_pool1, [-1, 16 * 8 * 24])
-    h_fc1 = tf.nn.sigmoid(tf.matmul(h_pool1_flat, W_fc1) + b_fc1)
+    h_fc1 = tf.nn.relu(tf.matmul(h_pool1_flat, W_fc1) + b_fc1)
 
     # Output layer
-    W_fc2 = weight_variable([1024, 7 * len(common.CHARS)])
+    W_fc2 = weight_variable([256, 7 * len(common.CHARS)])
     b_fc2 = bias_variable([7 * len(common.CHARS)])
 
     y = tf.matmul(h_fc1, W_fc2) + b_fc2
@@ -84,48 +90,48 @@ def deep_model():
     x = tf.placeholder(tf.float32, [None, 128 * 64])
 
     # First layer
-    W_conv1 = weight_variable([5, 5, 1, 24])
-    b_conv1 = bias_variable([24])
+    W_conv1 = weight_variable([5, 5, 1, 12])
+    b_conv1 = bias_variable([12])
     x_image = tf.reshape(x, [-1,64,128,1])
     h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-    h_pool1 = max_pool(h_conv1, stride=(2, 2))
+    h_pool1 = avg_pool(h_conv1, ksize=(4, 4), stride=(4, 4))
 
     # Second layer
-    W_conv2 = weight_variable([5, 5, 24, 32])
-    b_conv2 = bias_variable([32])
+    W_conv2 = weight_variable([5, 5, 12, 16])
+    b_conv2 = bias_variable([16])
 
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-    h_pool2 = max_pool(h_conv2, stride=(2, 1))
+    h_pool2 = avg_pool(h_conv2, ksize=(2, 1), stride=(2, 1))
 
     # Third layer
-    W_conv3 = weight_variable([5, 5, 32, 64])
-    b_conv3 = bias_variable([64])
+    W_conv3 = weight_variable([5, 5, 16, 32])
+    b_conv3 = bias_variable([32])
 
     h_conv3 = tf.nn.relu(conv2d(h_pool2, W_conv3) + b_conv3)
-    h_pool3 = max_pool(h_conv3, stride=(2, 2))
+    h_pool3 = avg_pool(h_conv3, ksize=(4, 2), stride=(4, 2))
 
     # Densely connected layer
-    W_fc1 = weight_variable([32 * 8 * 64, 2048])
-    b_fc1 = bias_variable([2048])
+    W_fc1 = weight_variable([16 * 2 * 32, 1024])
+    b_fc1 = bias_variable([1024])
 
-    h_pool3_flat = tf.reshape(h_pool3, [-1, 32 * 8 * 64])
+    h_pool3_flat = tf.reshape(h_pool3, [-1, 16 * 2 * 32])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool3_flat, W_fc1) + b_fc1)
 
     # Output layer
-    W_fc2 = weight_variable([2048, 7 * len(common.CHARS)])
+    W_fc2 = weight_variable([1024, 7 * len(common.CHARS)])
     b_fc2 = bias_variable([7 * len(common.CHARS)])
 
     y = tf.matmul(h_fc1, W_fc2) + b_fc2
     y = tf.reshape(y, [-1, 7, len(common.CHARS)])
 
-    return x, y, [W_conv1, b_conv1, W_conv2, b_conv2,
+    return x, y, [W_conv1, b_conv1, W_conv2, b_conv2, W_conv3, b_conv3,
                   W_fc1, b_fc1, W_fc2, b_fc2]
 
 
-MODEL = deep_model1
+MODEL = deep_model
 #LEARN_RATE = 2 * 1e-4
-LEARN_RATE = 0.01
-BATCH_SIZE = 10
+LEARN_RATE = 0.001
+BATCH_SIZE = 50
 REPORT_STEPS = 10
 
 
@@ -175,7 +181,7 @@ def read_batches(batch_size):
         yield unzip(gen_vecs())
 
 
-def train(learn_rate):
+def train(learn_rate, initial_weights=None):
     x, y, params = MODEL()
 
     y_ = tf.placeholder(tf.float32, [None, 7, len(common.CHARS)])
@@ -188,6 +194,11 @@ def train(learn_rate):
 
     best = tf.argmax(tf.reshape(y, [-1, 7, len(common.CHARS)]), 2)
     correct = tf.argmax(tf.reshape(y_, [-1, 7, len(common.CHARS)]), 2)
+
+    if initial_weights is not None:
+        assert len(params) == len(initial_weights)
+        assign_ops = [w.assign(v) for w, v in zip(params, initial_weights)]
+
     init = tf.initialize_all_variables()
 
     def vec_to_plate(v):
@@ -205,8 +216,8 @@ def train(learn_rate):
             batch_idx,
             100. * num_correct / (7 * len(r[0])),
             "".join("X "[numpy.array_equal(b, c)] for b, c in zip(*r_short)))
-        numpy.savez("batches/batch_{}.npz".format(batch_idx),
-                    *(p.eval() for p in params))
+        #numpy.savez("batches/batch_{}.npz".format(batch_idx),
+        #            *(p.eval() for p in params))
 
     def do_batch():
         sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
@@ -215,6 +226,8 @@ def train(learn_rate):
 
     with tf.Session() as sess:
         sess.run(init)
+        if initial_weights is not None:
+            sess.run(assign_ops)
 
         test_xs, test_ys = unzip(list(read_data("test/*.png"))[:50])
 
@@ -231,5 +244,11 @@ def train(learn_rate):
 
 
 if __name__ == "__main__":
-    train(LEARN_RATE)
+    if len(sys.argv) > 1:
+        f = numpy.load(sys.argv[1])
+        initial_weights = [f[n] for n in sorted(f.files)]
+    else:
+        initial_weights = None
+
+    train(LEARN_RATE, initial_weights=initial_weights)
 

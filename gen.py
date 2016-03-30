@@ -97,19 +97,20 @@ def pick_colors():
 
 
 def make_affine_transform(center_from, center_to, translation_amount,
-                          min_scale, max_scale):
-    scale = random.uniform(min_scale, max_scale)
-    roll = random.uniform(-0.15, 0.15)
-    pitch = random.uniform(-0.2, 0.2)
-    yaw = random.uniform(-0.9, 0.9)
+                          min_scale, max_scale, variation=1.0):
+    scale = random.uniform(min_scale * variation +
+                           max_scale * (1.0 - variation),
+                           max_scale)
+    roll = random.uniform(-0.15 * variation, 0.15 * variation)
+    pitch = random.uniform(-0.2 * variation, 0.2 * variation)
+    yaw = random.uniform(-0.9 * variation, 0.9 * variation)
 
-    scale = max_scale
-    translation_amount = roll = pitch = yaw = 0.
+    x_trans = random.uniform(-translation_amount * variation,
+                             translation_amount * variation)
+    y_trans = random.uniform(-translation_amount * variation,
+                             translation_amount * variation)
 
-    trans = numpy.matrix([random.uniform(-translation_amount,
-                                         translation_amount),
-                          random.uniform(-translation_amount,
-                                         translation_amount)]).T
+    trans = numpy.matrix([x_trans, y_trans]).T
 
     M = euler_to_mat(yaw, pitch, roll)[:2, :2]
     M *= scale
@@ -175,7 +176,7 @@ def generate_plate(font_height, char_ims):
     return plate, rounded_rect(out_shape, radius), code.replace(" ", "")
 
 
-def generate_im(char_ims):
+def generate_im(char_ims, variation=1.0):
     #bg = cv2.imread("bgs/{:08d}.jpg".format(random.randint(0, 108600)),
     #               cv2.CV_LOAD_IMAGE_GRAYSCALE) / 255.
     #bg = bg[bg.shape[0] // 4:3 * (bg.shape[0] // 4), :]
@@ -189,7 +190,8 @@ def generate_im(char_ims):
             center_to=numpy.matrix([bg.shape[1], bg.shape[0]]).T * 0.5,
             min_scale=0.8 * max_scale,
             max_scale=max_scale,
-            translation_amount=bg.shape[1] // 10)
+            translation_amount=bg.shape[1] // 10,
+            variation=variation)
     plate = cv2.warpAffine(plate, M, (bg.shape[1], bg.shape[0]))
     plate_mask = cv2.warpAffine(plate_mask, M, (bg.shape[1], bg.shape[0]))
 
@@ -208,9 +210,10 @@ def generate_ims(num_images):
     Generate a number of number plate images.
 
     """
+    variation = 1.0
     char_ims = dict(make_char_ims(FONT_HEIGHT))
     for i in range(num_images):
-        yield generate_im(char_ims)
+        yield generate_im(char_ims, variation=variation)
 
 
 def im_from_file(f):
@@ -258,7 +261,8 @@ def extract_backgrounds(archive_name):
 
 
 if __name__ == "__main__":
-    for img_idx, (im, c) in enumerate(generate_ims(int(sys.argv[1]))):
+    im_gen = generate_ims(int(sys.argv[1]))
+    for img_idx, (im, c) in enumerate(im_gen):
         fname = "test/{:08d}_{}.png".format(img_idx, c)
         print fname
         cv2.imwrite(fname, im * 255.)
