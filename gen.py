@@ -179,7 +179,7 @@ def generate_plate(font_height, char_ims):
 def generate_bg():
     found = False
     while not found:
-        bg = cv2.imread("/media/vbox_e_drive/bgs/{:08d}.jpg".format(
+        bg = cv2.imread("/home/matt/bgs/{:08d}.jpg".format(
                                                    random.randint(0, 108600)),
                         cv2.CV_LOAD_IMAGE_GRAYSCALE) / 255.
         if (bg.shape[1] >= OUTPUT_SHAPE[1] and
