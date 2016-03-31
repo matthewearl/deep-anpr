@@ -96,21 +96,37 @@ def pick_colors():
     return text_color, plate_color
 
 
-def make_affine_transform(center_from, center_to, translation_amount,
+def make_affine_transform(from_shape, to_shape, 
                           min_scale, max_scale, variation=1.0):
+    from_size = numpy.array([[from_shape[1], from_shape[0]]]).T
+    to_size = numpy.array([[to_shape[1], to_shape[0]]]).T
+
     scale = random.uniform(min_scale * variation +
                            max_scale * (1.0 - variation),
                            max_scale)
-    roll = random.uniform(-0.15 * variation, 0.15 * variation)
+    roll = random.uniform(-0.3 * variation, 0.3 * variation)
     pitch = random.uniform(-0.2 * variation, 0.2 * variation)
     yaw = random.uniform(-0.9 * variation, 0.9 * variation)
 
-    x_trans = random.uniform(-translation_amount * variation,
-                             translation_amount * variation)
-    y_trans = random.uniform(-translation_amount * variation,
-                             translation_amount * variation)
+    # Compute a bounding box on the skewed input image (`from_shape`).
+    M = euler_to_mat(yaw, pitch, roll)[:2, :2]
+    h, w = from_shape
+    corners = numpy.matrix([[-w, +w, -w, +w],
+                            [-h, -h, +h, +h]]) * 0.5
+    skewed_size = numpy.array(numpy.max(M * corners, axis=1) -
+                              numpy.min(M * corners, axis=1))
 
-    trans = numpy.matrix([x_trans, y_trans]).T
+    # Set the scale as large as possible such that the skewed and scaled shape
+    # is less than or equal to the desired ratio in either dimension.
+    scale *= numpy.min(to_size / skewed_size)
+
+    # Set the translation such that the skewed and scaled image falls within
+    # the output shape's bounds.
+    trans = ((to_size - skewed_size * scale) *
+                    (numpy.random.random((2,1)) - 0.5)) * variation
+
+    center_to = to_size / 2.
+    center_from = from_size / 2.
 
     M = euler_to_mat(yaw, pitch, roll)[:2, :2]
     M *= scale
@@ -200,11 +216,10 @@ def generate_im(char_ims, variation=1.0):
     
     max_scale = 0.8 * bg.shape[1] / plate.shape[1]
     M = make_affine_transform(
-            center_from=numpy.matrix([plate.shape[1], plate.shape[0]]).T * 0.5,
-            center_to=numpy.matrix([bg.shape[1], bg.shape[0]]).T * 0.5,
-            min_scale=0.8 * max_scale,
-            max_scale=max_scale,
-            translation_amount=bg.shape[1] // 10,
+            from_shape=plate.shape,
+            to_shape=bg.shape,
+            min_scale=0.6,
+            max_scale=0.875,
             variation=variation)
     plate = cv2.warpAffine(plate, M, (bg.shape[1], bg.shape[0]))
     plate_mask = cv2.warpAffine(plate_mask, M, (bg.shape[1], bg.shape[0]))
