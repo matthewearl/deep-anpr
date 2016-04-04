@@ -97,16 +97,24 @@ def pick_colors():
 
 
 def make_affine_transform(from_shape, to_shape, 
-                          min_scale, max_scale, variation=1.0):
+                          min_scale, max_scale,
+                          scale_variation=1.0,
+                          rotation_variation=1.0,
+                          translation_variation=1.0):
+    out_of_bounds = False
+
     from_size = numpy.array([[from_shape[1], from_shape[0]]]).T
     to_size = numpy.array([[to_shape[1], to_shape[0]]]).T
 
-    scale = random.uniform(min_scale * variation +
-                           max_scale * (1.0 - variation),
-                           max_scale)
-    roll = random.uniform(-0.3 * variation, 0.3 * variation)
-    pitch = random.uniform(-0.2 * variation, 0.2 * variation)
-    yaw = random.uniform(-0.9 * variation, 0.9 * variation)
+    scale = random.uniform((min_scale + max_scale) * 0.5 -
+                           (max_scale - min_scale) * 0.5 * scale_variation,
+                           (min_scale + max_scale) * 0.5 +
+                           (max_scale - min_scale) * 0.5 * scale_variation)
+    if scale > max_scale or scale < min_scale:
+        out_of_bounds = True
+    roll = random.uniform(-0.3, 0.3) * rotation_variation
+    pitch = random.uniform(-0.2, 0.2) * rotation_variation
+    yaw = random.uniform(-0.9, 0.9) * rotation_variation
 
     # Compute a bounding box on the skewed input image (`from_shape`).
     M = euler_to_mat(yaw, pitch, roll)[:2, :2]
@@ -122,8 +130,11 @@ def make_affine_transform(from_shape, to_shape,
 
     # Set the translation such that the skewed and scaled image falls within
     # the output shape's bounds.
-    trans = ((to_size - skewed_size * scale) *
-                    (numpy.random.random((2,1)) - 0.5)) * variation
+    trans = (numpy.random.random((2,1)) - 0.5) * translation_variation
+    trans = ((2.0 * trans) ** 5.0) / 2.0
+    if numpy.any(trans < -0.5) or numpy.any(trans > 0.5):
+        out_of_bounds = True
+    trans = (to_size - skewed_size * scale) * trans
 
     center_to = to_size / 2.
     center_from = from_size / 2.
@@ -132,7 +143,7 @@ def make_affine_transform(from_shape, to_shape,
     M *= scale
     M = numpy.hstack([M, trans + center_to - M * center_from])
 
-    return M
+    return M, out_of_bounds
 
 
 def generate_code():
@@ -209,18 +220,22 @@ def generate_bg():
     return bg
 
 
-def generate_im(char_ims, variation=1.0):
+def generate_im(char_ims, bg_prob=0.0):
     bg = generate_bg()
+
+    if random.random() < bg_prob:
+        return bg, None, False
 
     plate, plate_mask, code = generate_plate(FONT_HEIGHT, char_ims)
     
-    max_scale = 0.8 * bg.shape[1] / plate.shape[1]
-    M = make_affine_transform(
-            from_shape=plate.shape,
-            to_shape=bg.shape,
-            min_scale=0.6,
-            max_scale=0.875,
-            variation=variation)
+    M, out_of_bounds = make_affine_transform(
+                            from_shape=plate.shape,
+                            to_shape=bg.shape,
+                            min_scale=0.6,
+                            max_scale=0.875,
+                            rotation_variation=1.0,
+                            scale_variation=1.5,
+                            translation_variation=1.2)
     plate = cv2.warpAffine(plate, M, (bg.shape[1], bg.shape[0]))
     plate_mask = cv2.warpAffine(plate_mask, M, (bg.shape[1], bg.shape[0]))
 
@@ -231,10 +246,10 @@ def generate_im(char_ims, variation=1.0):
     out += numpy.random.normal(scale=0.05, size=out.shape)
     out = numpy.clip(out, 0., 1.)
 
-    return out, code
+    return out, code, not out_of_bounds
 
 
-def generate_ims(num_images):
+def generate_ims(num_images, bg_prob=0.0):
     """
     Generate a number of number plate images.
 
@@ -242,7 +257,7 @@ def generate_ims(num_images):
     variation = 1.0
     char_ims = dict(make_char_ims(FONT_HEIGHT))
     for i in range(num_images):
-        yield generate_im(char_ims, variation=variation)
+        yield generate_im(char_ims, bg_prob=bg_prob)
 
 
 def im_from_file(f):
@@ -290,9 +305,18 @@ def extract_backgrounds(archive_name):
 
 
 if __name__ == "__main__":
-    im_gen = generate_ims(int(sys.argv[1]))
-    for img_idx, (im, c) in enumerate(im_gen):
-        fname = "test/{:08d}_{}.png".format(img_idx, c)
-        print fname
-        cv2.imwrite(fname, im * 255.)
+    if sys.argv[1] == "detect":
+        im_gen = generate_ims(int(sys.argv[2]), bg_prob=0.5)
+        for img_idx, (im, _, p) in enumerate(im_gen):
+            fname = "detect_test/{:08d}_{}.png".format(img_idx,
+                                                       "1" if p else "0")
+            print fname
+            cv2.imwrite(fname, im * 255.)
+    elif sys.argv[1] == "read":
+        im_gen = generate_ims(int(sys.argv[2]))
+        for img_idx, (im, c, p) in enumerate(im_gen):
+            fname = "test/{:08d}_{}_{}.png".format(img_idx, c,
+                                                   "1" if p else "0")
+            print fname
+            cv2.imwrite(fname, im * 255.)
 

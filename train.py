@@ -35,86 +35,53 @@ def avg_pool(x, ksize=(2, 2), stride=(2, 2)):
                         strides=[1, stride[0], stride[1], 1], padding='SAME')
 
 
-def deep_model2():
+def detector_model():
     x = tf.placeholder(tf.float32, [None, 128 * 64])
 
-    # First layer
-    W_conv1 = weight_variable([5, 5, 1, 24])
-    b_conv1 = bias_variable([24])
+    W_conv1 = weight_variable([11, 11, 1, 32])
+    b_conv1 = bias_variable([32])
     x_image = tf.reshape(x, [-1,64,128,1])
     h_conv1 = tf.nn.sigmoid(conv2d(x_image, W_conv1) + b_conv1)
-    h_pool1 = max_pool(h_conv1, ksize=(8, 8), stride=(8, 8))
 
-    # Output layer
-    W_fc1 = weight_variable([16 * 8 * 24, 7 * len(common.CHARS)])
-    b_fc1 = bias_variable([7 * len(common.CHARS)])
+    W_conv2 = weight_variable([1, 1, 32, 1])
+    b_conv2 = bias_variable([1])
+    h_conv2 = tf.nn.sigmoid(conv2d(h_conv1, W_conv2) + b_conv2)
 
-    h_pool1_flat = tf.reshape(h_pool1, [-1, 16 * 8 * 24])
-    y = tf.matmul(h_pool1_flat, W_fc1) + b_fc1
+    b_final = bias_variable([1])
+    y = tf.reduce_sum(tf.reshape(h_conv2, [-1, 128 * 64]), 1) + b_final
 
-    y = tf.reshape(y, [-1, len(common.CHARS)])
-
-    return x, y, [W_conv1, b_conv1, W_fc1, b_fc1]
-
-
-def deep_model1():
-    x = tf.placeholder(tf.float32, [None, 128 * 64])
-
-    # First layer
-    W_conv1 = weight_variable([5, 5, 1, 24])
-    b_conv1 = bias_variable([24])
-    x_image = tf.reshape(x, [-1,64,128,1])
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-    h_pool1 = max_pool(h_conv1, ksize=(8, 8), stride=(8, 8))
-
-    # Densely connected layer
-    W_fc1 = weight_variable([16 * 8 * 24, 256])
-    b_fc1 = bias_variable([256])
-
-    h_pool1_flat = tf.reshape(h_pool1, [-1, 16 * 8 * 24])
-    h_fc1 = tf.nn.relu(tf.matmul(h_pool1_flat, W_fc1) + b_fc1)
-
-    # Output layer
-    W_fc2 = weight_variable([256, 7 * len(common.CHARS)])
-    b_fc2 = bias_variable([7 * len(common.CHARS)])
-
-    y = tf.matmul(h_fc1, W_fc2) + b_fc2
-
-    y = tf.reshape(y, [-1, len(common.CHARS)])
-
-    return x, y, [W_conv1, b_conv1,
-                  W_fc1, b_fc1, W_fc2, b_fc2]
+    return x, y, [W_conv1, b_conv1, W_conv2, b_conv2, b_final]
 
 
 def deep_model():
     x = tf.placeholder(tf.float32, [None, 128 * 64])
 
     # First layer
-    W_conv1 = weight_variable([5, 5, 1, 12])
-    b_conv1 = bias_variable([12])
+    W_conv1 = weight_variable([5, 5, 1, 18])
+    b_conv1 = bias_variable([18])
     x_image = tf.reshape(x, [-1,64,128,1])
     h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
     h_pool1 = avg_pool(h_conv1, ksize=(4, 4), stride=(4, 4))
 
     # Second layer
-    W_conv2 = weight_variable([5, 5, 12, 16])
-    b_conv2 = bias_variable([16])
+    W_conv2 = weight_variable([5, 5, 18, 24])
+    b_conv2 = bias_variable([24])
 
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
     h_pool2 = avg_pool(h_conv2, ksize=(2, 1), stride=(2, 1))
 
     # Third layer
-    W_conv3 = weight_variable([5, 5, 16, 32])
-    b_conv3 = bias_variable([32])
+    W_conv3 = weight_variable([5, 5, 24, 48])
+    b_conv3 = bias_variable([48])
 
     h_conv3 = tf.nn.relu(conv2d(h_pool2, W_conv3) + b_conv3)
     h_pool3 = avg_pool(h_conv3, ksize=(4, 2), stride=(4, 2))
 
     # Densely connected layer
-    W_fc1 = weight_variable([16 * 2 * 32, 1024])
+    W_fc1 = weight_variable([16 * 2 * 48, 1024])
     b_fc1 = bias_variable([1024])
 
-    h_pool3_flat = tf.reshape(h_pool3, [-1, 16 * 2 * 32])
+    h_pool3_flat = tf.reshape(h_pool3, [-1, 16 * 2 * 48])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool3_flat, W_fc1) + b_fc1)
 
     # Output layer
@@ -124,35 +91,45 @@ def deep_model():
     y = tf.matmul(h_fc1, W_fc2) + b_fc2
     y = tf.reshape(y, [-1, 7, len(common.CHARS)])
 
+    # Presence indicator
+    W_p = weight_variable([1024, 1])
+    b_p = bias_variable([1])
+    p = tf.matmul(h_fc1, W_p) + b_p
+
+    y = tf.concat(1, [p, tf.reshape(y, [-1, 7 * len(common.CHARS)])])
+
     return x, y, [W_conv1, b_conv1, W_conv2, b_conv2, W_conv3, b_conv3,
-                  W_fc1, b_fc1, W_fc2, b_fc2]
-
-
-MODEL = deep_model
-#LEARN_RATE = 2 * 1e-4
-LEARN_RATE = 0.001
-BATCH_SIZE = 50
-REPORT_STEPS = 10
+                     W_fc1, b_fc1, W_fc2, b_fc2, W_p, b_p]
 
 
 def im_to_vec(im):
     return im.flatten()
 
 
-def code_to_vec(code):
+def code_to_vec(p, code):
     def char_to_vec(c):
         y = numpy.zeros((len(common.CHARS),))
         y[common.CHARS.index(c)] = 1.0
         return y
 
-    return numpy.vstack([char_to_vec(c) for c in code])
+    c = numpy.vstack([char_to_vec(c) for c in code])
+
+    return numpy.concatenate([[1. if p else 0], c.flatten()])
 
 
 def read_data(img_glob):
     for fname in sorted(glob.glob(img_glob)):
         im = cv2.imread(fname)[:, :, 0].astype(numpy.float32) / 255.
         code = fname.split("/")[1][9:16]
-        yield im_to_vec(im), code_to_vec(code)
+        p = fname.split("/")[1][17] == '1'
+        yield im_to_vec(im), code_to_vec(p, code)
+
+
+def read_detect_data(img_glob):
+    for fname in sorted(glob.glob(img_glob)):
+        im = cv2.imread(fname)[:, :, 0].astype(numpy.float32) / 255.
+        p = fname.split("/")[1][9]
+        yield im_to_vec(im), 0. if p == '0' else 1.
 
 
 def unzip(b):
@@ -175,28 +152,110 @@ def batch(it, batch_size):
 
 def read_batches(batch_size):
     def gen_vecs():
-        for im, c in gen.generate_ims(batch_size):
-            yield im_to_vec(im), code_to_vec(c)
+        for im, c, p in gen.generate_ims(batch_size, bg_prob=0.0):
+            yield im_to_vec(im), code_to_vec(p, c)
     while True:
         yield unzip(gen_vecs())
 
 
-def train(learn_rate, initial_weights=None):
-    x, y, params = MODEL()
+def read_detect_batches(batch_size, bg_prob=0.0):
+    def gen_vecs():
+        for im, c, p in gen.generate_ims(batch_size, bg_prob=bg_prob):
+            yield im_to_vec(im), 1. if p else 0.
+    while True:
+        yield unzip(gen_vecs())
 
-    y_ = tf.placeholder(tf.float32, [None, 7, len(common.CHARS)])
 
-    #cross_entropy = -tf.reduce_sum(y_ * tf.log(y))
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
-                                       tf.reshape(y, [-1, len(common.CHARS)]),
-                                       tf.reshape(y_, [-1, len(common.CHARS)]))
+def train_detector(learn_rate, report_steps, batch_size, bg_prob,
+                   initial_weights=None):
+    x, y, params = detector_model()
+
+    y_ = tf.placeholder(tf.float32, [None])
+
+    #cross_entropy = (tf.nn.sigmoid_cross_entropy_with_logits(y, y_) +
+    #                 tf.nn.sigmoid_cross_entropy_with_logits(1. - y, 1 - y_))
+    cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(y, y_)
+    #cross_entropy = tf.reduce_sum((y_ * -tf.log(tf.nn.sigmoid(y)) +
+    #                              (1 - y_) * -tf.log(1 - tf.nn.sigmoid(y))))
+    #cross_entropy = tf.reduce_sum(tf.maximum(y, 0) -
+    #                              y * y_ +
+    #                              tf.log(1 + tf.exp(-tf.abs(y))))
     train_step = tf.train.AdamOptimizer(learn_rate).minimize(cross_entropy)
 
-    best = tf.argmax(tf.reshape(y, [-1, 7, len(common.CHARS)]), 2)
-    correct = tf.argmax(tf.reshape(y_, [-1, 7, len(common.CHARS)]), 2)
+    result = tf.greater(y, 0.0)
+
+    init = tf.initialize_all_variables()
 
     if initial_weights is not None:
         assert len(params) == len(initial_weights)
+        assign_ops = [w.assign(v) for w, v in zip(params, initial_weights)]
+
+    def do_report():
+        r, s, c = sess.run([result, tf.nn.sigmoid(y), cross_entropy],
+                           feed_dict={x: test_xs, y_: test_ys})
+
+        print "".join("{:4d}".format(int(100 * x)) for x in s)
+        print "".join("{:4d}".format(int(100 * x)) for x in test_ys)
+
+        print numpy.sum(c)
+
+        false_positives = (numpy.sum(r * (1. - test_ys)) /
+                            numpy.sum((1. - test_ys)))
+        false_negatives = (numpy.sum((1. - r) * test_ys) /
+                            numpy.sum(test_ys))
+
+        print "B{:3d} fp:{:2.02f}% fn:{:2.02f}%".format(
+            batch_idx, 100. * false_positives, 100. * false_negatives)
+
+    def do_batch():
+        sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
+        if batch_idx % report_steps == 0:
+            do_report()
+
+    with tf.Session() as sess:
+        sess.run(init)
+        if initial_weights is not None:
+            sess.run(assign_ops)
+
+        test_xs, test_ys = unzip(list(
+                                 read_detect_data("detect_test/*.png"))[:50])
+
+        try:
+            batch_iter = enumerate(read_detect_batches(batch_size,
+                                                       bg_prob=bg_prob))
+            last_weights = None
+            for batch_idx, (batch_xs, batch_ys) in batch_iter:
+                weights = [p.eval() for p in params]
+                if all(numpy.all(numpy.isnan(w)) for w in weights):
+                    raise WeightsWentNan
+                #if last_weights is not None:
+                    #print numpy.array(weights) - numpy.array(last_weights)
+                last_weights = weights
+                do_batch()
+        except KeyboardInterrupt, WeightsWentNan:
+            numpy.savez("detector_weights.npz", *last_weights)
+
+
+
+def train_reader(learn_rate, report_steps, batch_size, initial_weights=None):
+    x, y, params = deep_model()
+
+    y_ = tf.placeholder(tf.float32, [None, 7 * len(common.CHARS) + 1])
+
+    cross_entropy = (tf.nn.softmax_cross_entropy_with_logits(
+                                   tf.reshape(y[:, 1:],
+                                              [-1, len(common.CHARS)]),
+                                   tf.reshape(y_[:, 1:],
+                                              [-1, len(common.CHARS)])) +
+                     10. * tf.nn.sigmoid_cross_entropy_with_logits(
+                                y[:, :1], y_[:, :1]))
+    train_step = tf.train.AdamOptimizer(learn_rate).minimize(cross_entropy)
+
+    best = tf.argmax(tf.reshape(y[:, 1:], [-1, 7, len(common.CHARS)]), 2)
+    correct = tf.argmax(tf.reshape(y_[:, 1:], [-1, 7, len(common.CHARS)]), 2)
+
+    if initial_weights is not None:
+        #assert len(params) == len(initial_weights)
         assign_ops = [w.assign(v) for w, v in zip(params, initial_weights)]
 
     init = tf.initialize_all_variables()
@@ -205,23 +264,29 @@ def train(learn_rate, initial_weights=None):
         return "".join(common.CHARS[i] for i in v)
 
     def do_report():
-        r = sess.run([best, correct],
+        r = sess.run([best, correct, tf.greater(y[:, 0], 0), y_[:, 0]],
                      feed_dict={x: test_xs, y_: test_ys})
-        num_correct = numpy.sum(r[0] == r[1])
-        r_short = (r[0][:190], r[1][:190])
-        for b, c in zip(*r_short):
-            print "{} <-> {}".format(vec_to_plate(c), vec_to_plate(b))
+        num_correct = numpy.sum(
+                        numpy.logical_or(
+                            numpy.all(r[0] == r[1], axis=1),
+                            numpy.logical_and(r[2] < 0.5,
+                                              r[3] < 0.5)))
+        r_short = (r[0][:190], r[1][:190], r[2][:190], r[3][:190])
+        for b, c, pb, pc in zip(*r_short):
+            print "{} {} <-> {} {}".format(vec_to_plate(c), pc,
+                                           vec_to_plate(b), float(pb))
+        num_p_correct = numpy.sum(r[2] == r[3])
 
-        print "B{:3d} {:2.02f}% |{}|".format(
+        print "B{:3d} {:2.02f}% {:02.02f}% |{}|".format(
             batch_idx,
-            100. * num_correct / (7 * len(r[0])),
-            "".join("X "[numpy.array_equal(b, c)] for b, c in zip(*r_short)))
-        #numpy.savez("batches/batch_{}.npz".format(batch_idx),
-        #            *(p.eval() for p in params))
+            100. * num_correct / (len(r[0])),
+            100. * num_p_correct / len(r[2]),
+            "".join("X "[numpy.array_equal(b, c) or (not pb and not pc)]
+                                           for b, c, pb, pc in zip(*r_short)))
 
     def do_batch():
         sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
-        if batch_idx % REPORT_STEPS == 0:
+        if batch_idx % report_steps == 0:
             do_report()
 
     with tf.Session() as sess:
@@ -232,7 +297,7 @@ def train(learn_rate, initial_weights=None):
         test_xs, test_ys = unzip(list(read_data("test/*.png"))[:50])
 
         try:
-            batch_iter = enumerate(read_batches(BATCH_SIZE))
+            batch_iter = enumerate(read_batches(batch_size))
             for batch_idx, (batch_xs, batch_ys) in batch_iter:
                 weights = [p.eval() for p in params]
                 if all(numpy.all(numpy.isnan(w)) for w in weights):
@@ -244,11 +309,21 @@ def train(learn_rate, initial_weights=None):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        f = numpy.load(sys.argv[1])
+    if len(sys.argv) > 2:
+        f = numpy.load(sys.argv[2])
         initial_weights = [f[n] for n in sorted(f.files)]
     else:
         initial_weights = None
 
-    train(LEARN_RATE, initial_weights=initial_weights)
+    if sys.argv[1] == "detect":
+        train_detector(learn_rate=0.1,
+                       report_steps=10,
+                       batch_size=10,
+                       bg_prob=0.5,
+                       initial_weights=initial_weights)
+    elif sys.argv[1] == "read":
+        train_reader(learn_rate=0.001,
+                     report_steps=10,
+                     batch_size=50,
+                     initial_weights=initial_weights)
 
