@@ -57,49 +57,50 @@ def deep_model():
     x = tf.placeholder(tf.float32, [None, 128 * 64])
 
     # First layer
-    W_conv1 = weight_variable([5, 5, 1, 18])
-    b_conv1 = bias_variable([18])
+    W_conv1 = weight_variable([5, 5, 1, 48])
+    b_conv1 = bias_variable([48])
     x_image = tf.reshape(x, [-1,64,128,1])
     h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-    h_pool1 = avg_pool(h_conv1, ksize=(4, 4), stride=(4, 4))
+    h_pool1 = max_pool(h_conv1, ksize=(2, 2), stride=(2, 2))
 
     # Second layer
-    W_conv2 = weight_variable([5, 5, 18, 24])
-    b_conv2 = bias_variable([24])
+    W_conv2 = weight_variable([5, 5, 48, 64])
+    b_conv2 = bias_variable([64])
 
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-    h_pool2 = avg_pool(h_conv2, ksize=(2, 1), stride=(2, 1))
+    h_pool2 = max_pool(h_conv2, ksize=(2, 1), stride=(2, 1))
 
     # Third layer
-    W_conv3 = weight_variable([5, 5, 24, 48])
-    b_conv3 = bias_variable([48])
+    W_conv3 = weight_variable([5, 5, 64, 128])
+    b_conv3 = bias_variable([128])
 
     h_conv3 = tf.nn.relu(conv2d(h_pool2, W_conv3) + b_conv3)
-    h_pool3 = avg_pool(h_conv3, ksize=(4, 2), stride=(4, 2))
+    h_pool3 = max_pool(h_conv3, ksize=(2, 2), stride=(2, 2))
 
     # Densely connected layer
-    W_fc1 = weight_variable([16 * 2 * 48, 1024])
-    b_fc1 = bias_variable([1024])
+    W_fc1 = weight_variable([32 * 8 * 128, 2048])
+    b_fc1 = bias_variable([2048])
 
-    h_pool3_flat = tf.reshape(h_pool3, [-1, 16 * 2 * 48])
+    h_pool3_flat = tf.reshape(h_pool3, [-1, 32 * 8 * 128])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool3_flat, W_fc1) + b_fc1)
 
     # Output layer
-    W_fc2 = weight_variable([1024, 7 * len(common.CHARS)])
+    W_fc2 = weight_variable([2048, 7 * len(common.CHARS)])
     b_fc2 = bias_variable([7 * len(common.CHARS)])
 
     y = tf.matmul(h_fc1, W_fc2) + b_fc2
     y = tf.reshape(y, [-1, 7, len(common.CHARS)])
 
     # Presence indicator
-    W_p = weight_variable([1024, 1])
+    W_p = weight_variable([2048, 1])
     b_p = bias_variable([1])
     p = tf.matmul(h_fc1, W_p) + b_p
 
     y = tf.concat(1, [p, tf.reshape(y, [-1, 7 * len(common.CHARS)])])
 
-    return x, y, [W_conv1, b_conv1, W_conv2, b_conv2, W_conv3, b_conv3,
-                     W_fc1, b_fc1, W_fc2, b_fc2, W_p, b_p]
+    return (x, y, [W_conv1, b_conv1, W_conv2, b_conv2, W_conv3, b_conv3,
+                     W_fc1, b_fc1, W_fc2, b_fc2, W_p, b_p],
+            [x_image, h_pool1, h_pool2, h_pool3])
 
 
 def im_to_vec(im):
@@ -238,24 +239,27 @@ def train_detector(learn_rate, report_steps, batch_size, bg_prob,
 
 
 def train_reader(learn_rate, report_steps, batch_size, initial_weights=None):
-    x, y, params = deep_model()
+    x, y, params, debug_vars = deep_model()
 
     y_ = tf.placeholder(tf.float32, [None, 7 * len(common.CHARS) + 1])
 
-    cross_entropy = (tf.nn.softmax_cross_entropy_with_logits(
-                                   tf.reshape(y[:, 1:],
-                                              [-1, len(common.CHARS)]),
-                                   tf.reshape(y_[:, 1:],
-                                              [-1, len(common.CHARS)])) +
-                     10. * tf.nn.sigmoid_cross_entropy_with_logits(
-                                y[:, :1], y_[:, :1]))
+    digits_loss = tf.nn.softmax_cross_entropy_with_logits(
+                                          tf.reshape(y[:, 1:],
+                                                     [-1, len(common.CHARS)]),
+                                          tf.reshape(y_[:, 1:],
+                                                     [-1, len(common.CHARS)]))
+    digits_loss = tf.reduce_sum(digits_loss)
+    presence_loss = 10. * tf.nn.sigmoid_cross_entropy_with_logits(
+                                                          y[:, :1], y_[:, :1])
+    presence_loss = tf.reduce_sum(presence_loss)
+    cross_entropy = digits_loss + presence_loss
     train_step = tf.train.AdamOptimizer(learn_rate).minimize(cross_entropy)
 
     best = tf.argmax(tf.reshape(y[:, 1:], [-1, 7, len(common.CHARS)]), 2)
     correct = tf.argmax(tf.reshape(y_[:, 1:], [-1, 7, len(common.CHARS)]), 2)
 
     if initial_weights is not None:
-        #assert len(params) == len(initial_weights)
+        assert len(params) == len(initial_weights)
         assign_ops = [w.assign(v) for w, v in zip(params, initial_weights)]
 
     init = tf.initialize_all_variables()
@@ -264,7 +268,13 @@ def train_reader(learn_rate, report_steps, batch_size, initial_weights=None):
         return "".join(common.CHARS[i] for i in v)
 
     def do_report():
-        r = sess.run([best, correct, tf.greater(y[:, 0], 0), y_[:, 0]],
+        r = sess.run([best,
+                      correct,
+                      tf.greater(y[:, 0], 0),
+                      y_[:, 0],
+                      digits_loss,
+                      presence_loss,
+                      cross_entropy],
                      feed_dict={x: test_xs, y_: test_ys})
         num_correct = numpy.sum(
                         numpy.logical_or(
@@ -277,15 +287,20 @@ def train_reader(learn_rate, report_steps, batch_size, initial_weights=None):
                                            vec_to_plate(b), float(pb))
         num_p_correct = numpy.sum(r[2] == r[3])
 
-        print "B{:3d} {:2.02f}% {:02.02f}% |{}|".format(
+        print ("B{:3d} {:2.02f}% {:02.02f}% loss: {} "
+               "(digits: {}, presence: {}) |{}|").format(
             batch_idx,
             100. * num_correct / (len(r[0])),
             100. * num_p_correct / len(r[2]),
+            r[6],
+            r[4],
+            r[5],
             "".join("X "[numpy.array_equal(b, c) or (not pb and not pc)]
                                            for b, c, pb, pc in zip(*r_short)))
 
     def do_batch():
-        sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
+        sess.run(train_step,
+                      feed_dict={x: batch_xs, y_: batch_ys})
         if batch_idx % report_steps == 0:
             do_report()
 
@@ -311,7 +326,8 @@ def train_reader(learn_rate, report_steps, batch_size, initial_weights=None):
 if __name__ == "__main__":
     if len(sys.argv) > 2:
         f = numpy.load(sys.argv[2])
-        initial_weights = [f[n] for n in sorted(f.files)]
+        initial_weights = [f[n] for n in sorted(f.files,
+                                                key=lambda s: int(s[4:]))]
     else:
         initial_weights = None
 
@@ -322,8 +338,8 @@ if __name__ == "__main__":
                        bg_prob=0.5,
                        initial_weights=initial_weights)
     elif sys.argv[1] == "read":
-        train_reader(learn_rate=0.001,
-                     report_steps=10,
+        train_reader(learn_rate=0.0001,
+                     report_steps=20,
                      batch_size=50,
                      initial_weights=initial_weights)
 
