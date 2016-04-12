@@ -3,9 +3,7 @@ import glob
 import itertools
 import multiprocessing
 import random
-import Queue
 import sys
-import threading
 
 import cv2
 import numpy
@@ -181,34 +179,6 @@ def mpgen(f):
 
     return wrapped
         
-
-def threadgen(f):
-    @functools.wraps(f)
-    def wrapped(*args, **kwargs):
-        def main():
-            for item in f(*args, **kwargs):
-                if stop:
-                    break
-                q.put(item)
-
-        q = Queue.Queue(3) 
-        stop = False
-        thr = threading.Thread(target=main)
-        thr.start()
-        try:
-            while True:
-                item = q.get()
-                yield item
-        finally:
-            print "Waiting for proc to exit"
-            stop = True
-            try:
-                q.get_nowait()
-            except Queue.Empty:
-                pass
-            thr.join()
-
-    return wrapped
 
 @mpgen
 def read_batches(batch_size):
