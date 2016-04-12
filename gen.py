@@ -37,7 +37,7 @@ from PIL import ImageFont
 
 import common
 
-FONT_PATH = "/media/vbox_google_drive/UKNumberPlate.ttf"
+FONT_PATH = "UKNumberPlate.ttf"
 FONT_HEIGHT = 32  # Pixel size to which the chars are resized
 
 OUTPUT_SHAPE = (64, 128)
@@ -206,8 +206,7 @@ def generate_plate(font_height, char_ims):
 def generate_bg():
     found = False
     while not found:
-        bg = cv2.imread("/home/matt/bgs/{:08d}.jpg".format(
-                                                   random.randint(0, 108600)),
+        bg = cv2.imread("bgs/{:08d}.jpg".format(random.randint(0, 108600)),
                         cv2.CV_LOAD_IMAGE_GRAYSCALE) / 255.
         if (bg.shape[1] >= OUTPUT_SHAPE[1] and
             bg.shape[0] >= OUTPUT_SHAPE[0]):
