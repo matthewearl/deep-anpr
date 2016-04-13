@@ -37,13 +37,6 @@ def read_data(img_glob):
         yield im_to_vec(im), code_to_vec(p, code)
 
 
-def read_detect_data(img_glob):
-    for fname in sorted(glob.glob(img_glob)):
-        im = cv2.imread(fname)[:, :, 0].astype(numpy.float32) / 255.
-        p = fname.split("/")[1][9]
-        yield im_to_vec(im), 0. if p == '0' else 1.
-
-
 def unzip(b):
     xs, ys = zip(*b)
     xs = numpy.array(xs)
@@ -68,7 +61,6 @@ def mpgen(f):
             for item in f(*args, **kwargs):
                 q.put(item)
         finally:
-            print "Closing queue"
             q.close()
 
     @functools.wraps(f)
@@ -82,7 +74,6 @@ def mpgen(f):
                 item = q.get()
                 yield item
         finally:
-            print "Waiting for proc to exit"
             proc.terminate()
             proc.join()
 
@@ -99,86 +90,7 @@ def read_batches(batch_size):
         yield unzip(gen_vecs())
 
 
-def read_detect_batches(batch_size, bg_prob=0.0):
-    def gen_vecs():
-        for im, c, p in gen.generate_ims(batch_size, bg_prob=bg_prob):
-            yield im_to_vec(im), 1. if p else 0.
-    while True:
-        yield unzip(gen_vecs())
-
-
-def train_detector(learn_rate, report_steps, batch_size, bg_prob,
-                   initial_weights=None):
-    x, y, params = detector_model()
-
-    y_ = tf.placeholder(tf.float32, [None])
-
-    #cross_entropy = (tf.nn.sigmoid_cross_entropy_with_logits(y, y_) +
-    #                 tf.nn.sigmoid_cross_entropy_with_logits(1. - y, 1 - y_))
-    cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(y, y_)
-    #cross_entropy = tf.reduce_sum((y_ * -tf.log(tf.nn.sigmoid(y)) +
-    #                              (1 - y_) * -tf.log(1 - tf.nn.sigmoid(y))))
-    #cross_entropy = tf.reduce_sum(tf.maximum(y, 0) -
-    #                              y * y_ +
-    #                              tf.log(1 + tf.exp(-tf.abs(y))))
-    train_step = tf.train.AdamOptimizer(learn_rate).minimize(cross_entropy)
-
-    result = tf.greater(y, 0.0)
-
-    init = tf.initialize_all_variables()
-
-    if initial_weights is not None:
-        assert len(params) == len(initial_weights)
-        assign_ops = [w.assign(v) for w, v in zip(params, initial_weights)]
-
-    def do_report():
-        r, s, c = sess.run([result, tf.nn.sigmoid(y), cross_entropy],
-                           feed_dict={x: test_xs, y_: test_ys})
-
-        print "".join("{:4d}".format(int(100 * x)) for x in s)
-        print "".join("{:4d}".format(int(100 * x)) for x in test_ys)
-
-        print numpy.sum(c)
-
-        false_positives = (numpy.sum(r * (1. - test_ys)) /
-                            numpy.sum((1. - test_ys)))
-        false_negatives = (numpy.sum((1. - r) * test_ys) /
-                            numpy.sum(test_ys))
-
-        print "B{:3d} fp:{:2.02f}% fn:{:2.02f}%".format(
-            batch_idx, 100. * false_positives, 100. * false_negatives)
-
-    def do_batch():
-        sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
-        if batch_idx % report_steps == 0:
-            do_report()
-
-    with tf.Session() as sess:
-        sess.run(init)
-        if initial_weights is not None:
-            sess.run(assign_ops)
-
-        test_xs, test_ys = unzip(list(
-                                 read_detect_data("detect_test/*.png"))[:50])
-
-        try:
-            batch_iter = enumerate(read_detect_batches(batch_size,
-                                                       bg_prob=bg_prob))
-            last_weights = None
-            for batch_idx, (batch_xs, batch_ys) in batch_iter:
-                weights = [p.eval() for p in params]
-                if all(numpy.all(numpy.isnan(w)) for w in weights):
-                    raise WeightsWentNan
-                #if last_weights is not None:
-                    #print numpy.array(weights) - numpy.array(last_weights)
-                last_weights = weights
-                do_batch()
-        except KeyboardInterrupt, WeightsWentNan:
-            numpy.savez("detector_weights.npz", *last_weights)
-
-
-
-def train_reader(learn_rate, report_steps, batch_size, initial_weights=None):
+def train(learn_rate, report_steps, batch_size, initial_weights=None):
     x, y, params = model.get_training_model()
 
     y_ = tf.placeholder(tf.float32, [None, 7 * len(common.CHARS) + 1])
@@ -256,23 +168,21 @@ def train_reader(learn_rate, report_steps, batch_size, initial_weights=None):
             batch_iter = enumerate(read_batches(batch_size))
             for batch_idx, (batch_xs, batch_ys) in batch_iter:
                 do_batch()
-                if batch_idx == 60:
-                    break
         except KeyboardInterrupt:
             last_weights = [p.eval() for p in params]
             numpy.savez("weights.npz", *last_weights)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 2:
-        f = numpy.load(sys.argv[2])
+    if len(sys.argv) > 1:
+        f = numpy.load(sys.argv[1])
         initial_weights = [f[n] for n in sorted(f.files,
                                                 key=lambda s: int(s[4:]))]
     else:
         initial_weights = None
 
-    train_reader(learn_rate=0.001,
-                 report_steps=20,
-                 batch_size=50,
-                 initial_weights=initial_weights)
+    train(learn_rate=0.001,
+          report_steps=20,
+          batch_size=50,
+          initial_weights=initial_weights)
 

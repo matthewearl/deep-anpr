@@ -2,6 +2,7 @@ import tensorflow as tf
 
 import common
 
+
 # Utility functions
 def weight_variable(shape):
   initial = tf.truncated_normal(shape, stddev=0.1)
