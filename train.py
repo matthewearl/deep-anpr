@@ -11,30 +11,7 @@ import tensorflow as tf
 
 import common
 import gen
-
-def weight_variable(shape):
-  initial = tf.truncated_normal(shape, stddev=0.1)
-  return tf.Variable(initial)
-
-
-def bias_variable(shape):
-  initial = tf.constant(0.1, shape=shape)
-  return tf.Variable(initial)
-
-
-def conv2d(x, W, stride=(1, 1)):
-  return tf.nn.conv2d(x, W, strides=[1, stride[0], stride[1], 1],
-                      padding='SAME')
-
-
-def max_pool(x, ksize=(2, 2), stride=(2, 2)):
-  return tf.nn.max_pool(x, ksize=[1, ksize[0], ksize[1], 1],
-                        strides=[1, stride[0], stride[1], 1], padding='SAME')
-
-
-def avg_pool(x, ksize=(2, 2), stride=(2, 2)):
-  return tf.nn.avg_pool(x, ksize=[1, ksize[0], ksize[1], 1],
-                        strides=[1, stride[0], stride[1], 1], padding='SAME')
+import model
 
 
 def detector_model():
@@ -53,56 +30,6 @@ def detector_model():
     y = tf.reduce_sum(tf.reshape(h_conv2, [-1, 128 * 64]), 1) + b_final
 
     return x, y, [W_conv1, b_conv1, W_conv2, b_conv2, b_final]
-
-
-def deep_model():
-    x = tf.placeholder(tf.float32, [None, 128 * 64])
-
-    # First layer
-    W_conv1 = weight_variable([5, 5, 1, 48])
-    b_conv1 = bias_variable([48])
-    x_image = tf.reshape(x, [-1,64,128,1])
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-    h_pool1 = max_pool(h_conv1, ksize=(2, 2), stride=(2, 2))
-
-    # Second layer
-    W_conv2 = weight_variable([5, 5, 48, 64])
-    b_conv2 = bias_variable([64])
-
-    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-    h_pool2 = max_pool(h_conv2, ksize=(2, 1), stride=(2, 1))
-
-    # Third layer
-    W_conv3 = weight_variable([5, 5, 64, 128])
-    b_conv3 = bias_variable([128])
-
-    h_conv3 = tf.nn.relu(conv2d(h_pool2, W_conv3) + b_conv3)
-    h_pool3 = max_pool(h_conv3, ksize=(2, 2), stride=(2, 2))
-
-    # Densely connected layer
-    W_fc1 = weight_variable([32 * 8 * 128, 2048])
-    b_fc1 = bias_variable([2048])
-
-    h_pool3_flat = tf.reshape(h_pool3, [-1, 32 * 8 * 128])
-    h_fc1 = tf.nn.relu(tf.matmul(h_pool3_flat, W_fc1) + b_fc1)
-
-    # Output layer
-    W_fc2 = weight_variable([2048, 7 * len(common.CHARS)])
-    b_fc2 = bias_variable([7 * len(common.CHARS)])
-
-    y = tf.matmul(h_fc1, W_fc2) + b_fc2
-    y = tf.reshape(y, [-1, 7, len(common.CHARS)])
-
-    # Presence indicator
-    W_p = weight_variable([2048, 1])
-    b_p = bias_variable([1])
-    p = tf.matmul(h_fc1, W_p) + b_p
-
-    y = tf.concat(1, [p, tf.reshape(y, [-1, 7 * len(common.CHARS)])])
-
-    return (x, y, [W_conv1, b_conv1, W_conv2, b_conv2, W_conv3, b_conv3,
-                     W_fc1, b_fc1, W_fc2, b_fc2, W_p, b_p],
-            [x_image, h_pool1, h_pool2, h_pool3])
 
 
 def im_to_vec(im):
@@ -270,7 +197,7 @@ def train_detector(learn_rate, report_steps, batch_size, bg_prob,
 
 
 def train_reader(learn_rate, report_steps, batch_size, initial_weights=None):
-    x, y, params, debug_vars = deep_model()
+    x, y, params = model.get_training_model()
 
     y_ = tf.placeholder(tf.float32, [None, 7 * len(common.CHARS) + 1])
 
@@ -347,6 +274,8 @@ def train_reader(learn_rate, report_steps, batch_size, initial_weights=None):
             batch_iter = enumerate(read_batches(batch_size))
             for batch_idx, (batch_xs, batch_ys) in batch_iter:
                 do_batch()
+                if batch_idx == 60:
+                    break
         except KeyboardInterrupt:
             last_weights = [p.eval() for p in params]
             numpy.savez("weights.npz", *last_weights)
