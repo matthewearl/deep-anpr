@@ -304,18 +304,10 @@ def extract_backgrounds(archive_name):
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "detect":
-        im_gen = generate_ims(int(sys.argv[2]), bg_prob=0.5)
-        for img_idx, (im, _, p) in enumerate(im_gen):
-            fname = "detect_test/{:08d}_{}.png".format(img_idx,
-                                                       "1" if p else "0")
-            print fname
-            cv2.imwrite(fname, im * 255.)
-    elif sys.argv[1] == "read":
-        im_gen = generate_ims(int(sys.argv[2]))
-        for img_idx, (im, c, p) in enumerate(im_gen):
-            fname = "test/{:08d}_{}_{}.png".format(img_idx, c,
-                                                   "1" if p else "0")
-            print fname
-            cv2.imwrite(fname, im * 255.)
+    im_gen = generate_ims(int(sys.argv[1]))
+    for img_idx, (im, c, p) in enumerate(im_gen):
+        fname = "test/{:08d}_{}_{}.png".format(img_idx, c,
+                                               "1" if p else "0")
+        print fname
+        cv2.imwrite(fname, im * 255.)
 

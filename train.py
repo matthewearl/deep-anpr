@@ -14,24 +14,6 @@ import gen
 import model
 
 
-def detector_model():
-    x = tf.placeholder(tf.float32, [None, 128 * 64])
-
-    W_conv1 = weight_variable([11, 11, 1, 32])
-    b_conv1 = bias_variable([32])
-    x_image = tf.reshape(x, [-1,64,128,1])
-    h_conv1 = tf.nn.sigmoid(conv2d(x_image, W_conv1) + b_conv1)
-
-    W_conv2 = weight_variable([1, 1, 32, 1])
-    b_conv2 = bias_variable([1])
-    h_conv2 = tf.nn.sigmoid(conv2d(h_conv1, W_conv2) + b_conv2)
-
-    b_final = bias_variable([1])
-    y = tf.reduce_sum(tf.reshape(h_conv2, [-1, 128 * 64]), 1) + b_final
-
-    return x, y, [W_conv1, b_conv1, W_conv2, b_conv2, b_final]
-
-
 def im_to_vec(im):
     return im.flatten()
 
@@ -289,15 +271,8 @@ if __name__ == "__main__":
     else:
         initial_weights = None
 
-    if sys.argv[1] == "detect":
-        train_detector(learn_rate=0.1,
-                       report_steps=10,
-                       batch_size=10,
-                       bg_prob=0.5,
-                       initial_weights=initial_weights)
-    elif sys.argv[1] == "read":
-        train_reader(learn_rate=0.001,
-                     report_steps=20,
-                     batch_size=50,
-                     initial_weights=initial_weights)
+    train_reader(learn_rate=0.001,
+                 report_steps=20,
+                 batch_size=50,
+                 initial_weights=initial_weights)
 
