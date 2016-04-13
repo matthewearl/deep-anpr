@@ -2,7 +2,7 @@ import tensorflow as tf
 
 import common
 
-
+# Utility functions
 def weight_variable(shape):
   initial = tf.truncated_normal(shape, stddev=0.1)
   return tf.Variable(initial)
@@ -81,20 +81,12 @@ def get_training_model():
     h_fc1 = tf.nn.relu(tf.matmul(conv_layer_flat, W_fc1) + b_fc1)
 
     # Output layer
-    W_fc2 = weight_variable([2048, 7 * len(common.CHARS)])
-    b_fc2 = bias_variable([7 * len(common.CHARS)])
+    W_fc2 = weight_variable([2048, 1 + 7 * len(common.CHARS)])
+    b_fc2 = bias_variable([1 + 7 * len(common.CHARS)])
 
     y = tf.matmul(h_fc1, W_fc2) + b_fc2
-    y = tf.reshape(y, [-1, 7, len(common.CHARS)])
 
-    # Presence indicator
-    W_p = weight_variable([2048, 1])
-    b_p = bias_variable([1])
-    p = tf.matmul(h_fc1, W_p) + b_p
-
-    y = tf.concat(1, [p, tf.reshape(y, [-1, 7 * len(common.CHARS)])])
-
-    return (x, y, conv_vars + [W_fc1, b_fc1, W_fc2, b_fc2, W_p, b_p])
+    return (x, y, conv_vars + [W_fc1, b_fc1, W_fc2, b_fc2])
 
 
 def get_detect_model():
