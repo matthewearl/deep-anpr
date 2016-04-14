@@ -3,6 +3,9 @@ import tensorflow as tf
 import common
 
 
+WINDOW_SHAPE = (64, 128)
+
+
 # Utility functions
 def weight_variable(shape):
   initial = tf.truncated_normal(shape, stddev=0.1)
@@ -96,7 +99,7 @@ def get_detect_model():
     input, and slides the 128x64 window across the image in 8x8 strides.
 
     The output is of the form `v`, where `v[i, j]` is equivalent to the output
-    of the training model, for the window at coordinates `(8 * i, 8 * j)`.
+    of the training model, for the window at coordinates `(8 * i, 4 * j)`.
 
     """
     x, conv_layer, conv_vars = convolutional_layers()
@@ -106,7 +109,7 @@ def get_detect_model():
     W_conv1 = tf.reshape(W_fc1, [8,  32, 128])
     b_fc1 = bias_variable([2048])
     h_conv4 = tf.nn.relu(conv2d(conv_layer, W_conv1,
-                                stride=(8, 8), padding="VALID") + b_fc1) 
+                                stride=(1, 1), padding="VALID") + b_fc1) 
     # Fifth layer
     W_fc2 = weight_variable([2048, 1 + 7 * len(common.CHARS)])
     W_conv2 = tf.reshape(W_fc2, [1, 1, 2048, 1 + 7 * len(common.CHARS)])
@@ -114,3 +117,4 @@ def get_detect_model():
     h_conv5 = conv2d(h_conv4, W_conv5) + b_conv5 
 
     return (x, h_conv5, conv_vars + [W_fc1, b_fc1, W_fc2, b_fc2])
+

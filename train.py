@@ -4,6 +4,7 @@ import itertools
 import multiprocessing
 import random
 import sys
+import time
 
 import cv2
 import numpy
@@ -156,7 +157,7 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
         if batch_idx % report_steps == 0:
             do_report()
 
-    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.95)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         sess.run(init)
         if initial_weights is not None:
@@ -165,9 +166,20 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
         test_xs, test_ys = unzip(list(read_data("test/*.png"))[:50])
 
         try:
+            last_batch_idx = 0
+            last_batch_time = time.time()
             batch_iter = enumerate(read_batches(batch_size))
             for batch_idx, (batch_xs, batch_ys) in batch_iter:
                 do_batch()
+                if batch_idx % report_steps == 0:
+                    batch_time = time.time()
+                    if last_batch_idx != batch_idx:
+                        print "time for 60 batches {}".format(
+                            60 * (last_batch_time - batch_time) /
+                                            (last_batch_idx - batch_idx))
+                        last_batch_idx = batch_idx
+                        last_batch_time = batch_time
+
         except KeyboardInterrupt:
             last_weights = [p.eval() for p in params]
             numpy.savez("weights.npz", *last_weights)
