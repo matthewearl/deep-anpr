@@ -17,9 +17,9 @@ def bias_variable(shape):
   return tf.Variable(initial)
 
 
-def conv2d(x, W, stride=(1, 1)):
+def conv2d(x, W, stride=(1, 1), padding='SAME'):
   return tf.nn.conv2d(x, W, strides=[1, stride[0], stride[1], 1],
-                      padding='SAME')
+                      padding=padding)
 
 
 def max_pool(x, ksize=(2, 2), stride=(2, 2)):
@@ -37,13 +37,13 @@ def convolutional_layers():
     Get the convolutional layers of the model.
 
     """
-    x = tf.placeholder(tf.float32, [None, 128 * 64])
+    x = tf.placeholder(tf.float32, [None, None, None])
 
     # First layer
     W_conv1 = weight_variable([5, 5, 1, 48])
     b_conv1 = bias_variable([48])
-    x_image = tf.reshape(x, [-1,64,128,1])
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+    x_expanded = tf.expand_dims(x, 3)
+    h_conv1 = tf.nn.relu(conv2d(x_expanded, W_conv1) + b_conv1)
     h_pool1 = max_pool(h_conv1, ksize=(2, 2), stride=(2, 2))
 
     # Second layer
@@ -106,15 +106,15 @@ def get_detect_model():
     
     # Fourth layer
     W_fc1 = weight_variable([8 * 32 * 128, 2048])
-    W_conv1 = tf.reshape(W_fc1, [8,  32, 128])
+    W_conv1 = tf.reshape(W_fc1, [8,  32, 128, 2048])
     b_fc1 = bias_variable([2048])
-    h_conv4 = tf.nn.relu(conv2d(conv_layer, W_conv1,
+    h_conv1 = tf.nn.relu(conv2d(conv_layer, W_conv1,
                                 stride=(1, 1), padding="VALID") + b_fc1) 
     # Fifth layer
     W_fc2 = weight_variable([2048, 1 + 7 * len(common.CHARS)])
     W_conv2 = tf.reshape(W_fc2, [1, 1, 2048, 1 + 7 * len(common.CHARS)])
-    b_conv5 = bias_variable([1 + 7 * len(common.CHARS)])
-    h_conv5 = conv2d(h_conv4, W_conv5) + b_conv5 
+    b_fc2 = bias_variable([1 + 7 * len(common.CHARS)])
+    h_conv2 = conv2d(h_conv1, W_conv2) + b_fc2
 
-    return (x, h_conv5, conv_vars + [W_fc1, b_fc1, W_fc2, b_fc2])
+    return (x, h_conv2, conv_vars + [W_fc1, b_fc1, W_fc2, b_fc2])
 
