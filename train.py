@@ -15,10 +15,6 @@ import gen
 import model
 
 
-def im_to_vec(im):
-    return im.flatten()
-
-
 def code_to_vec(p, code):
     def char_to_vec(c):
         y = numpy.zeros((len(common.CHARS),))
@@ -35,7 +31,7 @@ def read_data(img_glob):
         im = cv2.imread(fname)[:, :, 0].astype(numpy.float32) / 255.
         code = fname.split("/")[1][9:16]
         p = fname.split("/")[1][17] == '1'
-        yield im_to_vec(im), code_to_vec(p, code)
+        yield im, code_to_vec(p, code)
 
 
 def unzip(b):
@@ -85,7 +81,7 @@ def mpgen(f):
 def read_batches(batch_size):
     def gen_vecs():
         for im, c, p in gen.generate_ims(batch_size, bg_prob=0.0):
-            yield im_to_vec(im), code_to_vec(p, c)
+            yield im, code_to_vec(p, c)
 
     while True:
         yield unzip(gen_vecs())
