@@ -42,20 +42,20 @@ def detect(im, param_vals):
     # To obtain pixel coordinates, the window coordinates are scaled according
     # to the stride size, and pixel coordinates.
     for i, (scaled_im, y_val) in enumerate(zip(scaled_ims, y_vals)):
-        for window_coords in numpy.argwhere(y_val[0, :, :, 0] > 0.1):
+        for window_coords in numpy.argwhere(y_val[0, :, :, 0] >
+                                                       -math.log(1./0.99 - 1)):
             letter_probs = (y_val[0,
                                   window_coords[0],
                                   window_coords[1], 1:].reshape(
                                     7, len(common.CHARS)))
             letter_probs = common.softmax(letter_probs)
 
-            if numpy.all(numpy.max(letter_probs, axis=1) > 0.5):
-                img_scale = float(im.shape[0]) / scaled_im.shape[0]
+            img_scale = float(im.shape[0]) / scaled_im.shape[0]
 
-                bbox_tl = window_coords * (8, 4) * img_scale
-                bbox_size = numpy.array(model.WINDOW_SHAPE) * img_scale
+            bbox_tl = window_coords * (8, 4) * img_scale
+            bbox_size = numpy.array(model.WINDOW_SHAPE) * img_scale
 
-                yield bbox_tl, bbox_tl + bbox_size
+            yield bbox_tl, bbox_tl + bbox_size
 
 
 if __name__ == "__main__":
@@ -69,7 +69,8 @@ if __name__ == "__main__":
         pt1 = tuple(reversed(map(int, pt1)))
         pt2 = tuple(reversed(map(int, pt2)))
 
-        cv2.rectangle(im, pt1, pt2, (0.0, 255.0, 0.0))
+        color = (0.0, 255.0, 0.0)
+        cv2.rectangle(im, pt1, pt2, color)
 
     cv2.imwrite(sys.argv[3], im)
 
