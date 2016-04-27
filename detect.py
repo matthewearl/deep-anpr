@@ -1,3 +1,5 @@
+import collections
+import itertools
 import math
 import sys
 
@@ -21,6 +23,22 @@ def make_scaled_ims(im, min_shape):
 
 
 def detect(im, param_vals):
+    """
+    Detect number plates in an image.
+
+    :param im:
+        Image to detect number plates in.
+
+    :param param_vals:
+        Model parameters to use.
+
+    :returns:
+        Iterable of `bbox_tl, bbox_br, letter_probs`, defining the bounding box
+        top-left and bottom-right corners respectively, and a 7,36 matrix
+        giving the probability distributions of each letter.
+
+    """
+
     # Convert the image to various scales.
     scaled_ims = list(make_scaled_ims(im, model.WINDOW_SHAPE))
 
@@ -55,7 +73,62 @@ def detect(im, param_vals):
             bbox_tl = window_coords * (8, 4) * img_scale
             bbox_size = numpy.array(model.WINDOW_SHAPE) * img_scale
 
-            yield bbox_tl, bbox_tl + bbox_size
+            yield bbox_tl, bbox_tl + bbox_size, letter_probs
+
+
+def _overlaps(match1, match2):
+    bbox_tl1, bbox_br1, _ = match1
+    bbox_tl2, bbox_br2, _ = match2
+    return (bbox_br1[0] > bbox_tl2[0] and
+            bbox_br2[0] > bbox_tl1[0] and
+            bbox_br1[1] > bbox_tl2[1] and
+            bbox_br2[1] > bbox_tl1[1])
+
+
+def _group_overlapping_rectangles(matches):
+    matches = list(matches)
+    num_groups = 0
+    match_to_group = {}
+    for idx1 in range(len(matches)):
+        for idx2 in range(idx1):
+            if _overlaps(matches[idx1], matches[idx2]):
+                match_to_group[idx1] = match_to_group[idx2]
+                break
+        else:
+            match_to_group[idx1] = num_groups 
+            num_groups += 1
+
+    groups = collections.defaultdict(list)
+    for idx, group in match_to_group.items():
+        groups[group].append(matches[idx])
+
+    return groups
+
+
+def post_process(matches):
+    """
+    Take an iterable of matches as returned by `detect` and merge duplicates.
+
+    Merging consists of two steps:
+      - Finding sets of overlapping rectangles.
+      - Finding the intersection of those sets, along with the maximum
+        probability for each letter.
+
+    """
+    groups = _group_overlapping_rectangles(matches)
+
+    for group_matches in groups.values():
+        mins = numpy.stack(numpy.array(m[0]) for m in group_matches)
+        maxs = numpy.stack(numpy.array(m[1]) for m in group_matches)
+        probs = numpy.stack(m[2] for m in group_matches)
+
+        yield (numpy.max(mins, axis=0).flatten(),
+               numpy.min(maxs, axis=0).flatten(),
+               numpy.max(probs, axis=0))
+
+
+def letter_probs_to_code(letter_probs):
+    return "".join(common.CHARS[i] for i in numpy.argmax(letter_probs, axis=1))
 
 
 if __name__ == "__main__":
@@ -65,12 +138,31 @@ if __name__ == "__main__":
     f = numpy.load(sys.argv[2])
     param_vals = [f[n] for n in sorted(f.files, key=lambda s: int(s[4:]))]
 
-    for pt1, pt2 in detect(im_gray, param_vals):
+    for pt1, pt2, letter_probs in post_process(detect(im_gray, param_vals)):
         pt1 = tuple(reversed(map(int, pt1)))
         pt2 = tuple(reversed(map(int, pt2)))
 
+        code = letter_probs_to_code(letter_probs)
+        print code
+
         color = (0.0, 255.0, 0.0)
         cv2.rectangle(im, pt1, pt2, color)
+
+        cv2.putText(im,
+                    code,
+                    pt1,
+                    cv2.FONT_HERSHEY_PLAIN, 
+                    1.5,
+                    (0, 0, 0),
+                    thickness=5)
+
+        cv2.putText(im,
+                    code,
+                    pt1,
+                    cv2.FONT_HERSHEY_PLAIN, 
+                    1.5,
+                    (255, 255, 255),
+                    thickness=2)
 
     cv2.imwrite(sys.argv[3], im)
 
