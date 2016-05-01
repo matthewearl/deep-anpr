@@ -114,7 +114,7 @@ def make_affine_transform(from_shape, to_shape,
         out_of_bounds = True
     roll = random.uniform(-0.3, 0.3) * rotation_variation
     pitch = random.uniform(-0.2, 0.2) * rotation_variation
-    yaw = random.uniform(-0.9, 0.9) * rotation_variation
+    yaw = random.uniform(-1.2, 1.2) * rotation_variation
 
     # Compute a bounding box on the skewed input image (`from_shape`).
     M = euler_to_mat(yaw, pitch, roll)[:2, :2]
