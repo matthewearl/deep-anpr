@@ -13,7 +13,7 @@ import model
 
 def make_scaled_ims(im, min_shape):
     ratio = 1. / 2 ** 0.5
-    shape = (im.shape[0] * 2, im.shape[1] * 2)
+    shape = (im.shape[0] / ratio, im.shape[1] / ratio)
 
     while True:
         shape = (int(shape[0] * ratio), int(shape[1] * ratio))
@@ -73,12 +73,15 @@ def detect(im, param_vals):
             bbox_tl = window_coords * (8, 4) * img_scale
             bbox_size = numpy.array(model.WINDOW_SHAPE) * img_scale
 
-            yield bbox_tl, bbox_tl + bbox_size, letter_probs
+            present_prob = common.sigmoid(
+                               y_val[0, window_coords[0], window_coords[1], 0])
+
+            yield bbox_tl, bbox_tl + bbox_size, present_prob, letter_probs
 
 
 def _overlaps(match1, match2):
-    bbox_tl1, bbox_br1, _ = match1
-    bbox_tl2, bbox_br2, _ = match2
+    bbox_tl1, bbox_br1, _, _ = match1
+    bbox_tl2, bbox_br2, _, _ = match2
     return (bbox_br1[0] > bbox_tl2[0] and
             bbox_br2[0] > bbox_tl1[0] and
             bbox_br1[1] > bbox_tl2[1] and
@@ -120,11 +123,13 @@ def post_process(matches):
     for group_matches in groups.values():
         mins = numpy.stack(numpy.array(m[0]) for m in group_matches)
         maxs = numpy.stack(numpy.array(m[1]) for m in group_matches)
-        probs = numpy.stack(m[2] for m in group_matches)
+        present_probs = numpy.array([m[2] for m in group_matches])
+        letter_probs = numpy.stack(m[3] for m in group_matches)
 
         yield (numpy.max(mins, axis=0).flatten(),
                numpy.min(maxs, axis=0).flatten(),
-               numpy.max(probs, axis=0))
+               numpy.max(present_probs),
+               letter_probs[numpy.argmax(present_probs)])
 
 
 def letter_probs_to_code(letter_probs):
@@ -138,12 +143,12 @@ if __name__ == "__main__":
     f = numpy.load(sys.argv[2])
     param_vals = [f[n] for n in sorted(f.files, key=lambda s: int(s[4:]))]
 
-    for pt1, pt2, letter_probs in post_process(detect(im_gray, param_vals)):
+    for pt1, pt2, present_prob, letter_probs in post_process(
+                                                  detect(im_gray, param_vals)):
         pt1 = tuple(reversed(map(int, pt1)))
         pt2 = tuple(reversed(map(int, pt2)))
 
         code = letter_probs_to_code(letter_probs)
-        print code
 
         color = (0.0, 255.0, 0.0)
         cv2.rectangle(im, pt1, pt2, color)
