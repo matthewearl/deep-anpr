@@ -18,6 +18,20 @@
 #     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+"""
+Definition of the neural networks. 
+
+"""
+
+
+__all__ = (
+    'get_training_model',
+    'get_detect_model',
+    'WINDOW_SHAPE',
+)
+
+
 import tensorflow as tf
 
 import common

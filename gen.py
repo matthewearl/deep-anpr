@@ -18,10 +18,19 @@
 #     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+
+"""
+Generate training and test images.
+
+"""
+
+
 __all__ = (
     'generate_ims',
     'extract_backgrounds',
 )
+
 
 import math
 import random
@@ -219,11 +228,8 @@ def generate_bg():
     return bg
 
 
-def generate_im(char_ims, bg_prob=0.0):
+def generate_im(char_ims):
     bg = generate_bg()
-
-    if random.random() < bg_prob:
-        return bg, None, False
 
     plate, plate_mask, code = generate_plate(FONT_HEIGHT, char_ims)
     
@@ -248,15 +254,21 @@ def generate_im(char_ims, bg_prob=0.0):
     return out, code, not out_of_bounds
 
 
-def generate_ims(num_images, bg_prob=0.0):
+def generate_ims(num_images):
     """
     Generate a number of number plate images.
+
+    :param num_images:
+        Number of images to generate.
+
+    :return:
+        Iterable of number plate images.
 
     """
     variation = 1.0
     char_ims = dict(make_char_ims(FONT_HEIGHT))
     for i in range(num_images):
-        yield generate_im(char_ims, bg_prob=bg_prob)
+        yield generate_im(char_ims)
 
 
 def im_from_file(f):
@@ -270,6 +282,9 @@ def extract_backgrounds(archive_name):
 
     JPEGs from the archive are converted into grayscale, and cropped/resized to
     256x256, and saved in ./bgs/.
+
+    :param archive_name:
+        Name of the .tar file containing JPEGs of background images.
 
     """
     t = tarfile.open(name=archive_name)

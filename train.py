@@ -18,6 +18,18 @@
 #     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+"""
+Routines for training the network.
+
+"""
+
+
+__all__ = (
+    'train',
+)
+
+
 import functools
 import glob
 import itertools
@@ -100,7 +112,7 @@ def mpgen(f):
 @mpgen
 def read_batches(batch_size):
     def gen_vecs():
-        for im, c, p in gen.generate_ims(batch_size, bg_prob=0.0):
+        for im, c, p in gen.generate_ims(batch_size):
             yield im, code_to_vec(p, c)
 
     while True:
@@ -108,6 +120,29 @@ def read_batches(batch_size):
 
 
 def train(learn_rate, report_steps, batch_size, initial_weights=None):
+    """
+    Train the network.
+
+    The function operates interactively: Progress is reported on stdout, and
+    training ceases upon `KeyboardInterrupt` at which point the learned weights
+    are saved to `weights.npz`, and also returned.
+
+    :param learn_rate:
+        Learning rate to use.
+
+    :param report_steps:
+        Every `report_steps` batches a progress report is printed.
+
+    :param batch_size:
+        The size of the batches used for training.
+
+    :param initial_weights:
+        (Optional.) Weights to initialize the network with.
+
+    :return:
+        The learned network weights.
+
+    """
     x, y, params = model.get_training_model()
 
     y_ = tf.placeholder(tf.float32, [None, 7 * len(common.CHARS) + 1])
@@ -199,6 +234,7 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
         except KeyboardInterrupt:
             last_weights = [p.eval() for p in params]
             numpy.savez("weights.npz", *last_weights)
+            return last_weights
 
 
 if __name__ == "__main__":

@@ -18,6 +18,22 @@
 #     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+"""
+Routines to detect number plates.
+
+Use `detect` to detect all bounding boxes, and use `post_process` on the output
+of `detect` to filter using non-maximum suppression.
+
+"""
+
+
+__all__ = (
+    'detect',
+    'post_process',
+)
+
+
 import collections
 import itertools
 import math
@@ -50,7 +66,8 @@ def detect(im, param_vals):
         Image to detect number plates in.
 
     :param param_vals:
-        Model parameters to use.
+        Model parameters to use. These are the parameters output by the `train`
+        module.
 
     :returns:
         Iterable of `bbox_tl, bbox_br, letter_probs`, defining the bounding box
@@ -134,8 +151,8 @@ def post_process(matches):
 
     Merging consists of two steps:
       - Finding sets of overlapping rectangles.
-      - Finding the intersection of those sets, along with the maximum
-        probability for each letter.
+      - Finding the intersection of those sets, along with the code
+        corresponding with the rectangle with the highest presence parameter.
 
     """
     groups = _group_overlapping_rectangles(matches)
