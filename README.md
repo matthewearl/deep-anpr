@@ -1,7 +1,7 @@
 # Deep ANPR
 
 Using neural networks to build an automatic number plate recognition system.
-See [this blog post](http://matthewearl.github.io/2016/04/17/cnn-anpr/) for an
+See [this blog post](http://matthewearl.github.io/2016/05/06/cnn-anpr/) for an
 explanation.
 
 Usage is as follows:
