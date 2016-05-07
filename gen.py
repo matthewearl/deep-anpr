@@ -28,14 +28,13 @@ Generate training and test images.
 
 __all__ = (
     'generate_ims',
-    'extract_backgrounds',
 )
 
 
 import math
+import os
 import random
 import sys
-import tarfile
 
 import cv2
 import numpy
@@ -212,11 +211,11 @@ def generate_plate(font_height, char_ims):
     return plate, rounded_rect(out_shape, radius), code.replace(" ", "")
 
 
-def generate_bg():
+def generate_bg(num_bg_images):
     found = False
     while not found:
-        bg = cv2.imread("bgs/{:08d}.jpg".format(random.randint(0, 108600)),
-                        cv2.CV_LOAD_IMAGE_GRAYSCALE) / 255.
+        fname = "bgs/{:08d}.jpg".format(random.randint(0, num_bg_images - 1))
+        bg = cv2.imread(fname, cv2.CV_LOAD_IMAGE_GRAYSCALE) / 255.
         if (bg.shape[1] >= OUTPUT_SHAPE[1] and
             bg.shape[0] >= OUTPUT_SHAPE[0]):
             found = True
@@ -228,8 +227,8 @@ def generate_bg():
     return bg
 
 
-def generate_im(char_ims):
-    bg = generate_bg()
+def generate_im(char_ims, num_bg_images):
+    bg = generate_bg(num_bg_images)
 
     plate, plate_mask, code = generate_plate(FONT_HEIGHT, char_ims)
     
@@ -267,58 +266,13 @@ def generate_ims(num_images):
     """
     variation = 1.0
     char_ims = dict(make_char_ims(FONT_HEIGHT))
+    num_bg_images = len(os.listdir("bgs"))
     for i in range(num_images):
-        yield generate_im(char_ims)
-
-
-def im_from_file(f):
-    a = numpy.asarray(bytearray(f.read()), dtype=numpy.uint8)
-    return cv2.imdecode(a, cv2.CV_LOAD_IMAGE_GRAYSCALE)
-
-
-def extract_backgrounds(archive_name):
-    """
-    Extract backgrounds from provided tar archive.
-
-    JPEGs from the archive are converted into grayscale, and cropped/resized to
-    256x256, and saved in ./bgs/.
-
-    :param archive_name:
-        Name of the .tar file containing JPEGs of background images.
-
-    """
-    t = tarfile.open(name=archive_name)
-
-    def members():
-        m = t.next()
-        while m:
-            yield m
-            m = t.next()
-    index = 0
-    for m in members():
-        if not m.name.endswith(".jpg"):
-            continue
-        f =  t.extractfile(m)
-        try:
-            im = im_from_file(f)
-        finally:
-            f.close()
-        if im is None:
-            continue
-        
-        if im.shape[0] > im.shape[1]:
-            im = im[:im.shape[1], :]
-        else:
-            im = im[:, :im.shape[0]]
-        if im.shape[0] > 256:
-            im = cv2.resize(im, (256, 256))
-        fname = "bgs/{:08}.jpg".format(index)
-        print fname
-        cv2.imwrite(fname, im)
-        index += 1
+        yield generate_im(char_ims, num_bg_images)
 
 
 if __name__ == "__main__":
+    os.mkdir("test")
     im_gen = generate_ims(int(sys.argv[1]))
     for img_idx, (im, c, p) in enumerate(im_gen):
         fname = "test/{:08d}_{}_{}.png".format(img_idx, c,
