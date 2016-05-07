@@ -8,6 +8,7 @@ Usage is as follows:
 
 1. `./extractbgs.py SUN397.tar.gz`: Extract ~3GB of background images from the [SUN database](http://groups.csail.mit.edu/vision/SUN/)
    into `bgs/`. (`bgs/` must not already exist.) The tar file (36GB) can be [downloaded here](http://vision.princeton.edu/projects/2010/SUN/SUN397.tar.gz).
+   This step may take a while as it will extract 108,634 images.
 
 2. `./gen.py 1000`: Generate 1000 test set images in `test/`. (`test/` must not
     already exist.) This step requires `UKNumberPlate.ttf` to be in the current
