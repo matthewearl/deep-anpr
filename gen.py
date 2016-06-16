@@ -47,7 +47,7 @@ from PIL import ImageFont
 
 import common
 
-FONT_PATH = "UKNumberPlate.ttf"
+FONT_DIR = "./fonts"
 FONT_HEIGHT = 32  # Pixel size to which the chars are resized
 
 OUTPUT_SHAPE = (64, 128)
@@ -55,10 +55,10 @@ OUTPUT_SHAPE = (64, 128)
 CHARS = common.CHARS + " "
 
 
-def make_char_ims(output_height):
+def make_char_ims(font_path, output_height):
     font_size = output_height * 4
 
-    font = ImageFont.truetype(FONT_PATH, font_size)
+    font = ImageFont.truetype(font_path, font_size)
 
     height = max(font.getsize(c)[1] for c in CHARS)
 
@@ -254,6 +254,12 @@ def generate_im(char_ims, num_bg_images):
 
     return out, code, not out_of_bounds
 
+def load_fonts(folder_path):
+    font_char_ims = {}
+    fonts = [f for f in os.listdir(folder_path) if f.endswith('.ttf')]
+    for font in fonts:
+        font_char_ims[font] = dict(make_char_ims(os.path.join(folder_path, font), FONT_HEIGHT))
+    return fonts, font_char_ims
 
 def generate_ims(num_images):
     """
@@ -267,10 +273,10 @@ def generate_ims(num_images):
 
     """
     variation = 1.0
-    char_ims = dict(make_char_ims(FONT_HEIGHT))
+    fonts, font_char_ims = load_fonts(FONT_DIR)
     num_bg_images = len(os.listdir("bgs"))
     for i in range(num_images):
-        yield generate_im(char_ims, num_bg_images)
+        yield generate_im(font_char_ims[random.choice(fonts)], num_bg_images)
 
 
 if __name__ == "__main__":
