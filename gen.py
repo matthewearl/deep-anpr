@@ -106,55 +106,128 @@ def pick_colors():
     return text_color, plate_color
 
 
-def make_affine_transform(from_shape, to_shape, 
-                          min_scale, max_scale,
-                          scale_variation=1.0,
-                          rotation_variation=1.0,
-                          translation_variation=1.0):
-    out_of_bounds = False
+def make_transform(yaw, pitch, roll, from_shape, bounds):
+    """
+    Make a 2x2 transform from the given parameters.
 
-    from_size = numpy.array([[from_shape[1], from_shape[0]]]).T
-    to_size = numpy.array([[to_shape[1], to_shape[0]]]).T
+    :param yaw:
+        Yaw angle to rotate by.
 
-    scale = random.uniform((min_scale + max_scale) * 0.5 -
-                           (max_scale - min_scale) * 0.5 * scale_variation,
-                           (min_scale + max_scale) * 0.5 +
-                           (max_scale - min_scale) * 0.5 * scale_variation)
-    if scale > max_scale or scale < min_scale:
-        out_of_bounds = True
-    roll = random.uniform(-0.3, 0.3) * rotation_variation
-    pitch = random.uniform(-0.2, 0.2) * rotation_variation
-    yaw = random.uniform(-1.2, 1.2) * rotation_variation
+    :param pitch:
+        Pitch angle to rotate by.
 
-    # Compute a bounding box on the skewed input image (`from_shape`).
+    :param roll:
+        Roll angle to rotate by.
+
+    :param from_shape:
+        Shape of the image being tranformed.
+
+    :param bounds:
+        The scale will be selected such that the resulting shape's size is
+        within these bounds.
+
+    :return:
+        A tuple `M`, `size` where `M` is the transformation, and `size` is the
+        size of the bounding box containing the transformed shape.
+
+    """
     M = euler_to_mat(yaw, pitch, roll)[:2, :2]
     h, w = from_shape
     corners = numpy.matrix([[-w, +w, -w, +w],
                             [-h, -h, +h, +h]]) * 0.5
     skewed_size = numpy.array(numpy.max(M * corners, axis=1) -
-                              numpy.min(M * corners, axis=1))
+                              numpy.min(M * corners, axis=1)).flatten()
+    scale = numpy.min(numpy.array(bounds) / skewed_size)
 
-    # Set the scale as large as possible such that the skewed and scaled shape
-    # is less than or equal to the desired ratio in either dimension.
-    scale *= numpy.min(to_size / skewed_size)
+    return M * scale, skewed_size * scale
 
-    # Set the translation such that the skewed and scaled image falls within
-    # the output shape's bounds.
-    trans = (numpy.random.random((2,1)) - 0.5) * translation_variation
-    trans = ((2.0 * trans) ** 5.0) / 2.0
-    if numpy.any(trans < -0.5) or numpy.any(trans > 0.5):
-        out_of_bounds = True
-    trans = (to_size - skewed_size * scale) * trans
 
-    center_to = to_size / 2.
-    center_from = from_size / 2.
+def make_affine_transform(from_shape, to_shape, 
+                          yaw_range, pitch_range, roll_range, scale_range,
+                          completely_inside=False):
+    """
+    Make a random affine transform for a shape, to fit within an output image. 
 
-    M = euler_to_mat(yaw, pitch, roll)[:2, :2]
-    M *= scale
-    M = numpy.hstack([M, trans + center_to - M * center_from])
+    A rotation (specified in terms of yaw/pitch/roll) are selected based on
+    ranges specified in the arguments.
+    
+    Scale is similarly specified by a range. A scale of 1.0 corresponds with an
+    output image whose size equals that of the output image in exactly one
+    dimension, with the other dimension being smaller.
+    
+    If `on_edge` is `False` translation is selected uniformly with the
+    constraint that the transformed shape's bounding box lies entirely within
+    the output shape. If `on_edge` is `True` translation is selected uniformly
+    with the constraint that the transformed shape's bounding box intersects
+    with one or more edges of the output shape.
 
-    return M, out_of_bounds
+    :param from_shape:
+        The shape being transformed.
 
+    :param to_shape:
+        The shape of the output image.
+
+    :param yaw_range:
+        A (min, max) tuple defining the uniform distribution from which the yaw
+        is selected.
+
+    :param pitch_range:
+        A (min, max) tuple defining the uniform distribution from which the
+        pitch is selected.
+
+    :param roll_range:
+        A (min, max) tuple defining the uniform distribution from which the
+        roll is selected.
+
+    :param scale_range:
+        A (min, max) tuple defining the uniform distribution from which the
+        scale is selected. The maximum must be less than 1.0.
+
+    :param completely_inside:
+        Indicate whether the bounding box of the transformed shape's bounding
+        box should lie entirely within the output shape (`True`) or whether
+        only part of the part of the transformed shape's bounding box should
+        lie within the output shape (`False`).
+
+    :return:
+        A tuple `M`, `out_of_bounds`, `scale` where `M` is the 2x3 affine
+        transform described above, `out_of_bounds` indicates whether the
+        transformed shape's bounding box partially lies outside of the output
+        shape (note `out_of_bounds` is always `False` if `completely_inside` is
+        `True`), and `scale` indicates the scale that was chosen.
+
+    """
+    yaw = random.uniform(*yaw_range)
+    pitch = random.uniform(*pitch_range)
+    roll = random.uniform(*roll_range)
+    scale = random.uniform(*scale_range)
+    bounds = scale * numpy.array([to_shape[1], to_shape[0]])
+
+    M, transformed_size = make_transform(yaw, pitch, roll, from_shape, bounds)
+
+    t = M * numpy.matrix([[-from_shape[1], -from_shape[0]]]).T * 0.5
+
+    # Determine out the x and y coordinates of the output shape centre.
+    if completely_inside:
+        x = random.uniform(transformed_size[0] / 2,
+                           to_shape[1] - transformed_size[0] / 2)
+        y = random.uniform(transformed_size[1] / 2,
+                           to_shape[0] - transformed_size[1] / 2)
+        out_of_bounds = False
+    else:
+        x = random.uniform(-transformed_size[0] / 2,
+                           to_shape[1] + transformed_size[0] / 2)
+        y = random.uniform(-transformed_size[1] / 2,
+                           to_shape[0] + transformed_size[1] / 2)
+        out_of_bounds = (x < transformed_size[0] / 2. or
+                         x > to_shape[1] - transformed_size[0] / 2 or
+                         y < transformed_size[1] / 2. or
+                         y > to_shape[0] - transformed_size[1] / 2)
+
+    t += numpy.matrix([[x], [y]])
+
+    return numpy.hstack([M, t]), out_of_bounds, scale
+                                         
 
 def generate_code():
     return "{}{}{}{} {}{}{}".format(
@@ -213,18 +286,18 @@ def generate_plate(font_height, char_ims):
     return plate, rounded_rect(out_shape, radius), code.replace(" ", "")
 
 
-def generate_bg(num_bg_images):
+def generate_bg(num_bg_images, output_shape):
     found = False
     while not found:
         fname = "bgs/{:08d}.jpg".format(random.randint(0, num_bg_images - 1))
         bg = cv2.imread(fname, cv2.CV_LOAD_IMAGE_GRAYSCALE) / 255.
-        if (bg.shape[1] >= OUTPUT_SHAPE[1] and
-            bg.shape[0] >= OUTPUT_SHAPE[0]):
+        if (bg.shape[1] >= output_shape[1] and
+            bg.shape[0] >= output_shape[0]):
             found = True
 
-    x = random.randint(0, bg.shape[1] - OUTPUT_SHAPE[1])
-    y = random.randint(0, bg.shape[0] - OUTPUT_SHAPE[0])
-    bg = bg[y:y + OUTPUT_SHAPE[0], x:x + OUTPUT_SHAPE[1]]
+    x = random.randint(0, bg.shape[1] - output_shape[1])
+    y = random.randint(0, bg.shape[0] - output_shape[0])
+    bg = bg[y:y + output_shape[0], x:x + output_shape[1]]
 
     return bg
 
@@ -234,25 +307,26 @@ def generate_im(char_ims, num_bg_images):
 
     plate, plate_mask, code = generate_plate(FONT_HEIGHT, char_ims)
     
-    M, out_of_bounds = make_affine_transform(
-                            from_shape=plate.shape,
-                            to_shape=bg.shape,
-                            min_scale=0.6,
-                            max_scale=0.875,
-                            rotation_variation=1.0,
-                            scale_variation=1.5,
-                            translation_variation=1.2)
+    M, out_of_bounds, scale = make_affine_transform(plate.shape,
+                                                    output_shape,
+                                                    roll_range=(-0.3, 0.3),
+                                                    pitch_range=(-0.2, 0.2),
+                                                    yaw_range=(-1.2, 1.2),
+                                                    scale_range=(0.5, 1.0),
+                                                    completely_inside=True)
+                                                    
+
     plate = cv2.warpAffine(plate, M, (bg.shape[1], bg.shape[0]))
     plate_mask = cv2.warpAffine(plate_mask, M, (bg.shape[1], bg.shape[0]))
 
     out = plate * plate_mask + bg * (1.0 - plate_mask)
 
-    out = cv2.resize(out, (OUTPUT_SHAPE[1], OUTPUT_SHAPE[0]))
+    out = cv2.resize(out, (output_shape[1], output_shape[0]))
 
     out += numpy.random.normal(scale=0.05, size=out.shape)
     out = numpy.clip(out, 0., 1.)
 
-    return out, code, not out_of_bounds
+    return out, code, not out_of_bounds and 0.6 < scale < 0.875
 
 
 def generate_ims(num_images):
@@ -266,7 +340,6 @@ def generate_ims(num_images):
         Iterable of number plate images.
 
     """
-    variation = 1.0
     char_ims = dict(make_char_ims(FONT_HEIGHT))
     num_bg_images = len(os.listdir("bgs"))
     for i in range(num_images):
