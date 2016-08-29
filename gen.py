@@ -50,7 +50,8 @@ import common
 FONT_PATH = "UKNumberPlate.ttf"
 FONT_HEIGHT = 32  # Pixel size to which the chars are resized
 
-OUTPUT_SHAPE = (64, 128)
+DETECT_OUTPUT_SHAPE = (64, 128)
+READ_OUTPUT_SHAPE = (64, 128)
 
 CHARS = common.CHARS + " "
 
@@ -106,6 +107,16 @@ def pick_colors():
     return text_color, plate_color
 
 
+def get_transformed_shape_size(M, shape):
+    """Return the size of the bounding box of a transformed shape."""
+    h, w = shape
+    corners = numpy.matrix([[-w, +w, -w, +w],
+                            [-h, -h, +h, +h]]) * 0.5
+    transformed_size = numpy.array(numpy.max(M * corners, axis=1) -
+                                   numpy.min(M * corners, axis=1)).flatten()
+    return transformed_size
+
+
 def make_transform(yaw, pitch, roll, from_shape, bounds):
     """
     Make a 2x2 transform from the given parameters.
@@ -132,11 +143,7 @@ def make_transform(yaw, pitch, roll, from_shape, bounds):
 
     """
     M = euler_to_mat(yaw, pitch, roll)[:2, :2]
-    h, w = from_shape
-    corners = numpy.matrix([[-w, +w, -w, +w],
-                            [-h, -h, +h, +h]]) * 0.5
-    skewed_size = numpy.array(numpy.max(M * corners, axis=1) -
-                              numpy.min(M * corners, axis=1)).flatten()
+    skewed_size = get_transformed_shape_size(M, from_shape)
     scale = numpy.min(numpy.array(bounds) / skewed_size)
 
     return M * scale, skewed_size * scale
@@ -205,6 +212,7 @@ def make_affine_transform(from_shape, to_shape,
 
     M, transformed_size = make_transform(yaw, pitch, roll, from_shape, bounds)
 
+    # Set `t` to the translation which puts the centre of the plate at 0, 0.
     t = M * numpy.matrix([[-from_shape[1], -from_shape[0]]]).T * 0.5
 
     # Determine out the x and y coordinates of the output shape centre.
@@ -224,6 +232,7 @@ def make_affine_transform(from_shape, to_shape,
                          y < transformed_size[1] / 2. or
                          y > to_shape[0] - transformed_size[1] / 2)
 
+    # Add the above to `t` to get the final translation.
     t += numpy.matrix([[x], [y]])
 
     return numpy.hstack([M, t]), out_of_bounds, scale
@@ -302,19 +311,22 @@ def generate_bg(num_bg_images, output_shape):
     return bg
 
 
-def generate_im(char_ims, num_bg_images):
-    bg = generate_bg(num_bg_images)
+def generate_detect_im(char_ims, num_bg_images, output_shape):
+    output_size = numpy.array([output_shape[1], output_shape[0]])
+
+    bg = generate_bg(num_bg_images, output_shape)
 
     plate, plate_mask, code = generate_plate(FONT_HEIGHT, char_ims)
+    plate_shape = plate.shape
+    plate_size = numpy.array([[plate.shape[1], plate.shape[0]]]).T
     
     M, out_of_bounds, scale = make_affine_transform(plate.shape,
                                                     output_shape,
                                                     roll_range=(-0.3, 0.3),
                                                     pitch_range=(-0.2, 0.2),
                                                     yaw_range=(-1.2, 1.2),
-                                                    scale_range=(0.5, 1.0),
-                                                    completely_inside=True)
-                                                    
+                                                    scale_range=(0.3, 1.0),
+                                                    completely_inside=False)
 
     plate = cv2.warpAffine(plate, M, (bg.shape[1], bg.shape[0]))
     plate_mask = cv2.warpAffine(plate_mask, M, (bg.shape[1], bg.shape[0]))
@@ -326,10 +338,42 @@ def generate_im(char_ims, num_bg_images):
     out += numpy.random.normal(scale=0.05, size=out.shape)
     out = numpy.clip(out, 0., 1.)
 
-    return out, code, not out_of_bounds and 0.6 < scale < 0.875
+    plate_centre = numpy.array(M * numpy.concatenate([plate_size * 0.5,
+                                                      [[1.]]])).T[0]
+    plate_centre = plate_centre/ output_size
+    skewed_size = get_transformed_shape_size(M[:, :2], plate_shape)
+    scale = numpy.max(skewed_size / output_size)
+
+    return out, plate_centre, scale
 
 
-def generate_ims(num_images):
+def generate_im(char_ims, num_bg_images, output_shape):
+    bg = generate_bg(num_bg_images, output_shape)
+
+    plate, plate_mask, code = generate_plate(FONT_HEIGHT, char_ims)
+    
+    M, out_of_bounds, scale = make_affine_transform(plate.shape,
+                                                    output_shape,
+                                                    roll_range=(-0.3, 0.3),
+                                                    pitch_range=(-0.2, 0.2),
+                                                    yaw_range=(-1.2, 1.2),
+                                                    scale_range=(0.9, 1.0),
+                                                    completely_inside=True)
+
+    plate = cv2.warpAffine(plate, M, (bg.shape[1], bg.shape[0]))
+    plate_mask = cv2.warpAffine(plate_mask, M, (bg.shape[1], bg.shape[0]))
+
+    out = plate * plate_mask + bg * (1.0 - plate_mask)
+
+    out = cv2.resize(out, (output_shape[1], output_shape[0]))
+
+    out += numpy.random.normal(scale=0.05, size=out.shape)
+    out = numpy.clip(out, 0., 1.)
+
+    return out, code, True
+
+
+def generate_ims(num_images, output_shape):
     """
     Generate a number of number plate images.
 
@@ -343,15 +387,34 @@ def generate_ims(num_images):
     char_ims = dict(make_char_ims(FONT_HEIGHT))
     num_bg_images = len(os.listdir("bgs"))
     for i in range(num_images):
-        yield generate_im(char_ims, num_bg_images)
+        yield generate_im(char_ims, num_bg_images, output_shape)
+
+
+def generate_detect_ims(num_images, output_shape):
+    char_ims = dict(make_char_ims(FONT_HEIGHT))
+    num_bg_images = len(os.listdir("bgs"))
+    for i in range(num_images):
+        yield generate_detect_im(char_ims, num_bg_images, output_shape)
 
 
 if __name__ == "__main__":
     os.mkdir("test")
-    im_gen = generate_ims(int(sys.argv[1]))
+
+    os.mkdir("test/read")
+    im_gen = generate_ims(int(sys.argv[1]), READ_OUTPUT_SHAPE)
     for img_idx, (im, c, p) in enumerate(im_gen):
-        fname = "test/{:08d}_{}_{}.png".format(img_idx, c,
-                                               "1" if p else "0")
+        fname = "test/read/{:08d}_{}_{}.png".format(img_idx, c,
+                                                    "1" if p else "0")
         print fname
         cv2.imwrite(fname, im * 255.)
 
+    os.mkdir("test/detect")
+    im_gen = generate_detect_ims(int(sys.argv[1]), DETECT_OUTPUT_SHAPE)
+    for img_idx, (im, centre, scale) in enumerate(im_gen):
+        centre_x, centre_y = centre.flatten()
+        fname = "test/detect/{:08d}_{:.3f}_{:.3f}_{:.3f}.png".format(img_idx,
+                                                                     centre_x,
+                                                                     centre_y,
+                                                                     scale)
+        print fname
+        cv2.imwrite(fname, im * 255.)
