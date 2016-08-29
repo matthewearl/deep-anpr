@@ -113,8 +113,9 @@ def mpgen(f):
 
 @mpgen
 def read_batches(batch_size):
+    g = gen.generate_ims()
     def gen_vecs():
-        for im, c, p in gen.generate_ims(batch_size):
+        for im, c, p in itertools.islice(g, batch_size):
             yield im, code_to_vec(p, c)
 
     while True:
@@ -233,6 +234,7 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
         try:
             last_batch_idx = 0
             last_batch_time = time.time()
+            print "1"
             batch_iter = enumerate(read_batches(batch_size))
             for batch_idx, (batch_xs, batch_ys) in batch_iter:
                 do_batch()

@@ -33,6 +33,7 @@ __all__ = (
 )
 
 
+import itertools
 import math
 import os
 import random
@@ -254,19 +255,20 @@ def generate_im(char_ims, num_bg_images):
 
     return out, code, not out_of_bounds
 
+
 def load_fonts(folder_path):
     font_char_ims = {}
     fonts = [f for f in os.listdir(folder_path) if f.endswith('.ttf')]
     for font in fonts:
-        font_char_ims[font] = dict(make_char_ims(os.path.join(folder_path, font), FONT_HEIGHT))
+        font_char_ims[font] = dict(make_char_ims(os.path.join(folder_path,
+                                                              font),
+                                                 FONT_HEIGHT))
     return fonts, font_char_ims
 
-def generate_ims(num_images):
-    """
-    Generate a number of number plate images.
 
-    :param num_images:
-        Number of images to generate.
+def generate_ims():
+    """
+    Generate number plate images.
 
     :return:
         Iterable of number plate images.
@@ -275,13 +277,13 @@ def generate_ims(num_images):
     variation = 1.0
     fonts, font_char_ims = load_fonts(FONT_DIR)
     num_bg_images = len(os.listdir("bgs"))
-    for i in range(num_images):
+    while True:
         yield generate_im(font_char_ims[random.choice(fonts)], num_bg_images)
 
 
 if __name__ == "__main__":
     os.mkdir("test")
-    im_gen = generate_ims(int(sys.argv[1]))
+    im_gen = itertools.islice(generate_ims(), int(sys.argv[1]))
     for img_idx, (im, c, p) in enumerate(im_gen):
         fname = "test/{:08d}_{}_{}.png".format(img_idx, c,
                                                "1" if p else "0")
