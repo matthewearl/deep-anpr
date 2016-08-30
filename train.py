@@ -234,7 +234,6 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
         try:
             last_batch_idx = 0
             last_batch_time = time.time()
-            print "1"
             batch_iter = enumerate(read_batches(batch_size))
             for batch_idx, (batch_xs, batch_ys) in batch_iter:
                 do_batch()
