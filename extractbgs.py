@@ -62,10 +62,10 @@ def extract_backgrounds(archive_name):
     t = tarfile.open(name=archive_name)
 
     def members():
-        m = t.next()
+        m = next(t)
         while m:
             yield m
-            m = t.next()
+            m = next(t)
     index = 0
     for m in members():
         if not m.name.endswith(".jpg"):
@@ -85,7 +85,7 @@ def extract_backgrounds(archive_name):
         if im.shape[0] > 256:
             im = cv2.resize(im, (256, 256))
         fname = "bgs/{:08}.jpg".format(index)
-        print fname
+        print(fname)
         rc = cv2.imwrite(fname, im)
         if not rc:
             raise Exception("Failed to write file {}".format(fname))
