@@ -140,6 +140,11 @@ def get_detect_model():
     
     # Fourth layer
     W_fc1 = weight_variable([8 * 32 * 128, 2048])
+    """
+    variable conv_layer has 3 maxpools added previously,they are 2x2, 2x1, 2x2 = 8x4,
+    so 8x32 in this layer equals to use a 64x128(matrix read by opencv is height/width)
+    window at input image,   
+    """
     W_conv1 = tf.reshape(W_fc1, [8,  32, 128, 2048])
     b_fc1 = bias_variable([2048])
     h_conv1 = tf.nn.relu(conv2d(conv_layer, W_conv1,
