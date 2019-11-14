@@ -184,7 +184,7 @@ if __name__ == "__main__":
 
     for pt1, pt2, present_prob, letter_probs in post_process(
                                                   detect(im_gray, param_vals)):
-         pt1 = tuple(reversed(list(map(int, pt1))))
+        pt1 = tuple(reversed(list(map(int, pt1))))
         pt2 = tuple(reversed(list(map(int, pt2))))
 
         code = letter_probs_to_code(letter_probs)
