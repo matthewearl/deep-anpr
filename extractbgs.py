@@ -85,7 +85,7 @@ def extract_backgrounds(archive_name):
         if im.shape[0] > 256:
             im = cv2.resize(im, (256, 256))
         fname = "bgs/{:08}.jpg".format(index)
-        print fname
+        print(fname)
         rc = cv2.imwrite(fname, im)
         if not rc:
             raise Exception("Failed to write file {}".format(fname))
