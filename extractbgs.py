@@ -43,7 +43,7 @@ import numpy
 
 def im_from_file(f):
     a = numpy.asarray(bytearray(f.read()), dtype=numpy.uint8)
-    return cv2.imdecode(a, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+    return cv2.imdecode(a, cv2.IMREAD_GRAYSCALE)
 
 
 def extract_backgrounds(archive_name):
