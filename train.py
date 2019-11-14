@@ -202,7 +202,7 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
                                               r[3] < 0.5)))
         r_short = (r[0][:190], r[1][:190], r[2][:190], r[3][:190])
         for b, c, pb, pc in zip(*r_short):
-            print "{} {} <-> {} {}".format(vec_to_plate(c), pc,
+            print("{} {} <-> {} {}").format(vec_to_plate(c), pc,
                                            vec_to_plate(b), float(pb))
         num_p_correct = numpy.sum(r[2] == r[3])
 
