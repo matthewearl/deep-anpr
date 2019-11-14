@@ -240,7 +240,7 @@ def train(learn_rate, report_steps, batch_size, initial_weights=None):
                 if batch_idx % report_steps == 0:
                     batch_time = time.time()
                     if last_batch_idx != batch_idx:
-                        print "time for 60 batches {}".format(
+                        print("time for 60 batches {}").format(
                             60 * (last_batch_time - batch_time) /
                                             (last_batch_idx - batch_idx))
                         last_batch_idx = batch_idx
