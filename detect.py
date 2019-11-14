@@ -89,7 +89,7 @@ def detect(im, param_vals):
         y_vals = []
         for scaled_im in scaled_ims:
             feed_dict = {x: numpy.stack([scaled_im])}
-            feed_dict.update(dict(zip(params, param_vals)))
+            feed_dict.update(dict(list(zip(params, param_vals))))
             y_vals.append(sess.run(y, feed_dict=feed_dict))
 
     # Interpret the results in terms of bounding boxes in the input image.
@@ -141,7 +141,7 @@ def _group_overlapping_rectangles(matches):
             num_groups += 1
 
     groups = collections.defaultdict(list)
-    for idx, group in match_to_group.items():
+    for idx, group in list(match_to_group.items()):
         groups[group].append(matches[idx])
 
     return groups
@@ -159,7 +159,7 @@ def post_process(matches):
     """
     groups = _group_overlapping_rectangles(matches)
 
-    for group_matches in groups.values():
+    for group_matches in list(groups.values()):
         mins = numpy.stack(numpy.array(m[0]) for m in group_matches)
         maxs = numpy.stack(numpy.array(m[1]) for m in group_matches)
         present_probs = numpy.array([m[2] for m in group_matches])
@@ -184,8 +184,8 @@ if __name__ == "__main__":
 
     for pt1, pt2, present_prob, letter_probs in post_process(
                                                   detect(im_gray, param_vals)):
-        pt1 = tuple(reversed(map(int, pt1)))
-        pt2 = tuple(reversed(map(int, pt2)))
+        pt1 = tuple(reversed(list(map(int, pt1))))
+        pt2 = tuple(reversed(list(map(int, pt2))))
 
         code = letter_probs_to_code(letter_probs)
 
